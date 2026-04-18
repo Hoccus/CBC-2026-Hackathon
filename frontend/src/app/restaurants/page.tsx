@@ -1,6 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { api } from "@convex/_generated/api";
+import { Profile } from "@/lib/persistence";
+import { useQuery } from "convex/react";
+import { useState } from "react";
 
 interface PlaceResult {
   place_id: string;
@@ -24,11 +27,6 @@ interface ScoredRestaurant {
 
 interface EnrichedResult extends ScoredRestaurant {
   place?: PlaceResult;
-}
-
-interface Profile {
-  restrictions: string[];
-  goals: { calories: number };
 }
 
 const PRICE_SYMBOLS = ["Free", "$", "$$", "$$$", "$$$$"];
@@ -76,22 +74,15 @@ async function geocodeAddress(query: string): Promise<{ lat: number; lon: number
 }
 
 export default function RestaurantsPage() {
+  const profile = useQuery(api.profiles.getMine) as Profile | null | undefined;
   const [status, setStatus] = useState<"idle" | "locating" | "fetching" | "scoring" | "done" | "error">("idle");
   const [results, setResults] = useState<EnrichedResult[]>([]);
   const [allPlaces, setAllPlaces] = useState<PlaceResult[]>([]);
   const [errorMsg, setErrorMsg] = useState("");
-  const [profile, setProfile] = useState<Profile | null>(null);
   const [locationName, setLocationName] = useState("");
   const [keyword, setKeyword] = useState("");
   const [addressInput, setAddressInput] = useState("");
   const [radiusMiles, setRadiusMiles] = useState(1);
-
-  useEffect(() => {
-    try {
-      const p = localStorage.getItem("nutricoach_profile");
-      if (p) setProfile(JSON.parse(p));
-    } catch {}
-  }, []);
 
   async function searchWithCoords(lat: number, lon: number) {
     setStatus("fetching");
@@ -180,7 +171,7 @@ export default function RestaurantsPage() {
     }
   }
 
-  async function useAddress() {
+  async function searchByAddress() {
     if (!addressInput.trim()) return;
     setStatus("locating");
     setErrorMsg("");
@@ -210,10 +201,7 @@ export default function RestaurantsPage() {
         </div>
       ) : null}
 
-      {/* Search panel */}
       <div className="card mb-4" style={{ padding: "20px" }}>
-
-        {/* GPS button — primary action */}
         <button
           className="btn btn-primary btn-full"
           style={{ padding: "11px", fontSize: 14 }}
@@ -221,30 +209,28 @@ export default function RestaurantsPage() {
           disabled={busy}
         >
           {busy && status === "locating" && !addressInput
-            ? <><span className="spinner" style={{ borderColor: "#ffffff55", borderTopColor: "#fff" }} /> Locating…</>
+            ? <><span className="spinner" style={{ borderColor: "#ffffff55", borderTopColor: "#fff" }} /> Locating...</>
             : <>📍 Use my current location</>}
         </button>
 
-        {/* Divider */}
         <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "14px 0" }}>
           <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
           <span style={{ fontSize: 12, color: "var(--light)", fontWeight: 500 }}>or</span>
           <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
         </div>
 
-        {/* Address input */}
         <div className="flex gap-2">
           <input
             className="input"
             placeholder="City, zip code, or address"
             value={addressInput}
             onChange={(e) => setAddressInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && !busy && useAddress()}
+            onKeyDown={(e) => e.key === "Enter" && !busy && searchByAddress()}
             disabled={busy}
           />
           <button
             className="btn btn-secondary"
-            onClick={useAddress}
+            onClick={searchByAddress}
             disabled={busy || !addressInput.trim()}
             style={{ whiteSpace: "nowrap" }}
           >
@@ -254,7 +240,6 @@ export default function RestaurantsPage() {
 
         <div style={{ height: 1, background: "var(--border)", margin: "14px 0" }} />
 
-        {/* Cuisine keyword */}
         <div className="form-group" style={{ marginBottom: 14 }}>
           <label className="label-text">Cuisine (optional)</label>
           <input
@@ -266,7 +251,6 @@ export default function RestaurantsPage() {
           />
         </div>
 
-        {/* Radius slider */}
         <div className="form-group">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <label className="label-text">Search radius</label>
@@ -282,20 +266,19 @@ export default function RestaurantsPage() {
             style={{ width: "100%", accentColor: "var(--text)", cursor: "pointer", marginTop: 6 }}
           />
           <div className="flex" style={{ justifyContent: "space-between" }}>
-            <span className="text-muted" style={{ fontSize: 11 }}>¼ mile</span>
+            <span className="text-muted" style={{ fontSize: 11 }}>1/4 mile</span>
             <span className="text-muted" style={{ fontSize: 11 }}>10 miles</span>
           </div>
         </div>
       </div>
 
-      {/* Loading */}
       {busy && (
         <div className="card text-center" style={{ padding: "40px 24px" }}>
           <span className="spinner" style={{ width: 28, height: 28, borderWidth: 3 }} />
           <p className="mt-4" style={{ fontWeight: 600 }}>
-            {status === "locating" && "Finding your location…"}
-            {status === "fetching" && "Searching Google Places…"}
-            {status === "scoring" && "Scoring restaurants for your goals…"}
+            {status === "locating" && "Finding your location..."}
+            {status === "fetching" && "Searching Google Places..."}
+            {status === "scoring" && "Scoring restaurants for your goals..."}
           </p>
           {(status === "fetching" || status === "scoring") && allPlaces.length > 0 && (
             <p className="text-muted mt-2">{allPlaces.length} places found</p>
@@ -303,7 +286,6 @@ export default function RestaurantsPage() {
         </div>
       )}
 
-      {/* Error */}
       {!busy && status === "error" && (
         <div className="card" style={{ padding: "20px", borderColor: "#fecaca", background: "#fef2f2" }}>
           <p style={{ fontWeight: 600, color: "#991b1b", marginBottom: 4 }}>Could not load restaurants</p>
@@ -311,7 +293,6 @@ export default function RestaurantsPage() {
         </div>
       )}
 
-      {/* Results */}
       {!busy && status === "done" && (
         <>
           <div className="flex items-center gap-3 mb-4">
@@ -330,7 +311,7 @@ export default function RestaurantsPage() {
                   <div className="restaurant-info">
                     <div className="flex items-center gap-2" style={{ flexWrap: "wrap" }}>
                       <p style={{ fontWeight: 700, fontSize: 15 }}>{r.name}</p>
-                      {p?.open_now === true  && <span className="badge badge-green">Open</span>}
+                      {p?.open_now === true && <span className="badge badge-green">Open</span>}
                       {p?.open_now === false && <span className="badge badge-red">Closed</span>}
                       {p?.price_level != null && (
                         <span className="badge badge-gray">{PRICE_SYMBOLS[p.price_level]}</span>

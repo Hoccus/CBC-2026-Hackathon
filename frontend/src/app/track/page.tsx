@@ -1,5 +1,8 @@
 "use client";
 
+import { api } from "@convex/_generated/api";
+import { useMutation } from "convex/react";
+import Image from "next/image";
 import { useRef, useState } from "react";
 
 interface MacroResult {
@@ -22,6 +25,7 @@ function MacroCard({ label, value, unit }: { label: string; value: number; unit:
 }
 
 export default function TrackPage() {
+  const addAnalyzedMeal = useMutation(api.meals.addAnalyzed);
   const [tab, setTab] = useState<"photo" | "text">("photo");
   const [description, setDescription] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -65,17 +69,16 @@ export default function TrackPage() {
     }
   }
 
-  function addToLog() {
+  async function addToLog() {
     if (!result) return;
-    const entry = {
-      id: crypto.randomUUID(), timestamp: Date.now(),
+    await addAnalyzedMeal({
       description: result.description,
-      calories: result.calories, protein_g: result.protein_g,
-      carbs_g: result.carbs_g, fat_g: result.fat_g,
-    };
-    const log = JSON.parse(localStorage.getItem("nutricoach_log") || "[]");
-    log.push(entry);
-    localStorage.setItem("nutricoach_log", JSON.stringify(log));
+      calories: result.calories,
+      protein_g: result.protein_g,
+      carbs_g: result.carbs_g,
+      fat_g: result.fat_g,
+      notes: result.health_notes,
+    });
     setAdded(true);
   }
 
@@ -113,7 +116,14 @@ export default function TrackPage() {
               onDrop={onDrop}
             >
               {imagePreview ? (
-                <img src={imagePreview} alt="preview" style={{ maxHeight: 200, maxWidth: "100%", borderRadius: 4 }} />
+                <Image
+                  src={imagePreview}
+                  alt="preview"
+                  width={320}
+                  height={200}
+                  unoptimized
+                  style={{ maxHeight: 200, maxWidth: "100%", borderRadius: 4, objectFit: "contain" }}
+                />
               ) : (
                 <>
                   <p style={{ fontSize: 13, fontWeight: 500 }}>Drop an image or click to upload</p>

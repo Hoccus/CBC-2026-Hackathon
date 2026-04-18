@@ -12,6 +12,8 @@ interface FormData {
   goal: 'lose' | 'maintain' | 'gain'
 }
 
+export type MacroOnboardingFormData = FormData
+
 interface OnboardingFormProps {
   onSubmit: (data: FormData) => void
 }
