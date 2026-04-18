@@ -5,7 +5,10 @@ load_dotenv()
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from routers import coach, meals, track, restaurants
+try:
+    from .routers import coach, meals, track, restaurants  # type: ignore
+except ImportError:
+    from routers import coach, meals, track, restaurants  # type: ignore
 
 app = FastAPI(title="NutriCoach API", version="0.1.0")
 

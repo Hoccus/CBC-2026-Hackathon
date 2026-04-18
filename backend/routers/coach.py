@@ -1,7 +1,10 @@
 import os
 import anthropic
 from fastapi import APIRouter, HTTPException
-from models.nutrition import CoachRequest, CoachResponse
+try:
+    from ..models.nutrition import CoachRequest, CoachResponse  # type: ignore
+except ImportError:
+    from models.nutrition import CoachRequest, CoachResponse  # type: ignore
 
 router = APIRouter()
 

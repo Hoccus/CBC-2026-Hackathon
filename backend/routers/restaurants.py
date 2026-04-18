@@ -38,7 +38,11 @@ async def score_restaurants(req: RestaurantRequest):
     if not req.restaurants:
         raise HTTPException(status_code=400, detail="No restaurants provided.")
 
-    client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not set")
+
+    client = anthropic.Anthropic(api_key=api_key)
 
     items = "\n".join(
         f"- {r.name} ({r.cuisine or r.amenity})" for r in req.restaurants[:20]
@@ -72,5 +76,9 @@ Only use restaurant names exactly as they appear in the list above."""
     if not match:
         raise HTTPException(status_code=500, detail="Could not parse restaurant suggestions.")
 
-    data = json.loads(match.group())
+    try:
+        data = json.loads(match.group())
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=502, detail="Unexpected response from AI.")
+
     return RestaurantResponse(suggestions=[ScoredRestaurant(**r) for r in data])
