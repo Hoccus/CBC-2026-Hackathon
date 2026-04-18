@@ -31,8 +31,10 @@ Two screens live above the tab navigator:
 | LogSheet → photo estimate | 🟡 Fake | `POST /api/track/analyze` (to wire — old `TrackScreen.tsx` has the working logic) |
 | Dashboard weekly columns | 🟡 Fake | client-side aggregation of `/api/meals` (to wire) |
 | Dashboard travel banner | ❌ No backend | Needs calendar + location + scoring combined |
-| Plan timeline | ❌ No backend | Needs a calendar feed |
+| Plan timeline | 🟡 Fake | `POST /api/schedule/plan` (to wire — endpoint exists, takes appointments) |
 | More travel-nutrition stats | ❌ No backend | New aggregates needed |
+
+See [docs/mobile-phase2.md](mobile-phase2.md) for the full Phase 2 wiring punch list.
 
 Profile and meal log are persisted locally via `AsyncStorage` under `nutricoach_profile` and `nutricoach_log`.
 
