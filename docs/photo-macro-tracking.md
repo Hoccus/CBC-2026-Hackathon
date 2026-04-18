@@ -100,10 +100,26 @@ With the server running, visit [http://localhost:8000/docs](http://localhost:800
 
 ## Running the Backend
 
+**First time — one command:**
+```bash
+./backend/setup.sh
+```
+This creates `backend/.venv`, installs all dependencies, and copies `.env.example` to `.env`. Edit `backend/.env` and set your `ANTHROPIC_API_KEY`.
+
+**Start the server:**
+```bash
+./backend/run.sh
+```
+
+Server runs at http://localhost:8000. Interactive docs at http://localhost:8000/docs.
+
+**Manual setup (if you prefer):**
 ```bash
 cd backend
-python -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env   # add your ANTHROPIC_API_KEY
+cp .env.example .env   # add ANTHROPIC_API_KEY
 uvicorn main:app --reload
 ```
+
+> **Note for Windows users:** the `.sh` scripts require a bash shell (Git Bash, WSL, or similar). On native Windows PowerShell, follow the manual steps but replace activation with `.\.venv\Scripts\Activate.ps1`.
