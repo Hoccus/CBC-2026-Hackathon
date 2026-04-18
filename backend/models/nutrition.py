@@ -4,7 +4,8 @@ from typing import Optional
 
 class CoachRequest(BaseModel):
     message: str
-    context: Optional[str] = None  # e.g. "at home", "on the road", "at a restaurant"
+    context: Optional[str] = None
+    profile_context: Optional[str] = None
 
 
 class CoachResponse(BaseModel):
@@ -12,10 +13,22 @@ class CoachResponse(BaseModel):
     suggestions: list[str] = []
 
 
+class MacroEstimate(BaseModel):
+    calories: float
+    protein_g: float
+    carbs_g: float
+    fat_g: float
+    fiber_g: float
+    food_identified: str
+    confidence: str  # "low" | "medium" | "high"
+    notes: Optional[str] = None
+
+
 class MealLog(BaseModel):
     description: str
-    location: Optional[str] = None  # e.g. "home", "airport", "hotel"
+    location: Optional[str] = None
     notes: Optional[str] = None
+    macros: Optional[MacroEstimate] = None
 
 
 class MealLogResponse(BaseModel):
@@ -23,4 +36,5 @@ class MealLogResponse(BaseModel):
     description: str
     location: Optional[str]
     notes: Optional[str]
-    nutritional_summary: Optional[str] = None
+    macros: Optional[MacroEstimate] = None
+
