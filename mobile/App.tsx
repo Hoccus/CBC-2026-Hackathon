@@ -1,106 +1,99 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { ActivityIndicator, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { BlurView } from 'expo-blur';
-import { Ionicons } from '@expo/vector-icons';
-import { Platform, StyleSheet, View } from 'react-native';
+import { useFonts } from 'expo-font';
+import {
+  BarlowCondensed_500Medium, BarlowCondensed_600SemiBold,
+  BarlowCondensed_700Bold, BarlowCondensed_800ExtraBold,
+} from '@expo-google-fonts/barlow-condensed';
+import {
+  Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold,
+} from '@expo-google-fonts/inter';
+import {
+  SpaceGrotesk_400Regular, SpaceGrotesk_500Medium,
+  SpaceGrotesk_600SemiBold, SpaceGrotesk_700Bold,
+} from '@expo-google-fonts/space-grotesk';
 
 import HomeScreen from './src/screens/HomeScreen';
-import CoachScreen from './src/screens/CoachScreen';
-import TrackScreen from './src/screens/TrackScreen';
+import FoodLogScreen from './src/screens/FoodLogScreen';
 import RestaurantsScreen from './src/screens/RestaurantsScreen';
-import ProfileScreen from './src/screens/ProfileScreen';
-import { RootTabParamList } from './src/navigation';
+import MoreScreen from './src/screens/MoreScreen';
+import PlanScreen from './src/screens/PlanScreen';
+import CoachScreen from './src/screens/CoachScreen';
+import CustomTabBar from './src/components/CustomTabBar';
+import LogSheet from './src/components/LogSheet';
+import { RootStackParamList, RootTabParamList } from './src/navigation';
 import { colors } from './src/theme';
 
 const Tab = createBottomTabNavigator<RootTabParamList>();
+const Stack = createNativeStackNavigator<RootStackParamList>();
 
-const theme = {
+const navTheme = {
   ...DefaultTheme,
+  dark: true,
   colors: {
     ...DefaultTheme.colors,
     background: colors.bg,
     card: colors.bg,
     text: colors.text,
     border: colors.border,
-    primary: colors.text,
+    primary: colors.accent,
   },
 };
 
-type IconName = keyof typeof Ionicons.glyphMap;
-
-const ICONS: Record<keyof RootTabParamList, { active: IconName; inactive: IconName }> = {
-  Dashboard:   { active: 'home',          inactive: 'home-outline' },
-  Coach:       { active: 'chatbubble',    inactive: 'chatbubble-outline' },
-  Track:       { active: 'camera',        inactive: 'camera-outline' },
-  Restaurants: { active: 'location',      inactive: 'location-outline' },
-  Profile:     { active: 'person',        inactive: 'person-outline' },
-};
-
-function TabBarBackground() {
-  // Liquid-glass: translucent blurred layer with a thin hairline on top.
-  // Falls back to a plain translucent white on Android.
-  if (Platform.OS === 'ios') {
-    return (
-      <BlurView
-        tint="systemChromeMaterialLight"
-        intensity={90}
-        style={StyleSheet.absoluteFill}
-      />
-    );
-  }
-  return <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.94)' }]} />;
+function MainTabs() {
+  const [logOpen, setLogOpen] = useState(false);
+  return (
+    <>
+      <Tab.Navigator
+        screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: colors.bg } }}
+        tabBar={(props) => <CustomTabBar {...props} onFab={() => setLogOpen(true)} />}
+      >
+        <Tab.Screen name="Dashboard"   component={HomeScreen} />
+        <Tab.Screen name="Log"         component={FoodLogScreen} />
+        <Tab.Screen name="Restaurants" component={RestaurantsScreen} />
+        <Tab.Screen name="More"        component={MoreScreen} />
+      </Tab.Navigator>
+      <LogSheet visible={logOpen} onClose={() => setLogOpen(false)} />
+    </>
+  );
 }
 
 export default function App() {
+  const [loaded] = useFonts({
+    BarlowCondensed_500Medium, BarlowCondensed_600SemiBold,
+    BarlowCondensed_700Bold, BarlowCondensed_800ExtraBold,
+    Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold,
+    SpaceGrotesk_400Regular, SpaceGrotesk_500Medium,
+    SpaceGrotesk_600SemiBold, SpaceGrotesk_700Bold,
+  });
+
+  if (!loaded) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator color={colors.accent} />
+      </View>
+    );
+  }
+
   return (
     <SafeAreaProvider>
-      <NavigationContainer theme={theme}>
-        <StatusBar style="dark" />
-        <Tab.Navigator
-          screenOptions={({ route }) => ({
-            headerShown: false,
-            tabBarActiveTintColor: colors.text,
-            tabBarInactiveTintColor: colors.light,
-            tabBarLabelStyle: { fontSize: 10, fontWeight: '500', marginTop: 2 },
-            tabBarIconStyle: { marginTop: 2 },
-            tabBarStyle: styles.tabBar,
-            tabBarBackground: () => <TabBarBackground />,
-            tabBarIcon: ({ focused, color, size }) => {
-              const names = ICONS[route.name];
-              return (
-                <Ionicons
-                  name={focused ? names.active : names.inactive}
-                  size={size - 2}
-                  color={color}
-                />
-              );
-            },
-          })}
-        >
-          <Tab.Screen name="Dashboard"   component={HomeScreen} />
-          <Tab.Screen name="Coach"       component={CoachScreen} />
-          <Tab.Screen name="Track"       component={TrackScreen} />
-          <Tab.Screen name="Restaurants" component={RestaurantsScreen} />
-          <Tab.Screen name="Profile"     component={ProfileScreen} />
-        </Tab.Navigator>
+      <NavigationContainer theme={navTheme}>
+        <StatusBar style="light" />
+        <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}>
+          <Stack.Screen name="MainTabs" component={MainTabs} />
+          <Stack.Screen name="Plan"     component={PlanScreen} />
+          <Stack.Screen
+            name="Coach"
+            component={CoachScreen}
+            options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
+          />
+        </Stack.Navigator>
       </NavigationContainer>
     </SafeAreaProvider>
   );
 }
-
-const styles = StyleSheet.create({
-  tabBar: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'transparent',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(0,0,0,0.12)',
-    elevation: 0,
-    // height is auto so the tab bar respects safe-area insets
-  },
-});

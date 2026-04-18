@@ -1,38 +1,96 @@
-// Mirrors frontend/src/app/globals.css :root variables
+// Dark NutriCoach theme — mirrors frontend/src/components/prototype/atoms.tsx
+import { Platform } from 'react-native';
+
 export const colors = {
-  bg: '#ffffff',
-  surface: '#ffffff',
-  surfaceAlt: '#fafafa',
-  border: '#e8e8e8',
-  borderStrong: '#d0d0d0',
-  text: '#111111',
-  muted: '#737373',
-  light: '#a3a3a3',
-  primaryLt: '#f5f5f5',
-  track: '#f0f0f0',
+  bg: '#0a0a0a',
+  surface: 'rgba(255,255,255,0.04)',
+  surfaceStrong: 'rgba(255,255,255,0.06)',
+  border: 'rgba(255,255,255,0.06)',
+  borderStrong: 'rgba(255,255,255,0.08)',
+  text: '#ffffff',
+  textDim: 'rgba(255,255,255,0.85)',
+  muted: 'rgba(255,255,255,0.6)',
+  mutedSoft: 'rgba(255,255,255,0.5)',
+  light: 'rgba(255,255,255,0.45)',
+  faint: 'rgba(255,255,255,0.3)',
+  scrim: 'rgba(0,0,0,0.5)',
 
-  scoreHighBg: '#f0fdf4',
-  scoreHighFg: '#166534',
-  scoreMidBg: '#fefce8',
-  scoreMidFg: '#854d0e',
-  scoreLowBg: '#fef2f2',
-  scoreLowFg: '#991b1b',
+  // Tab bar / pill backgrounds
+  tabSurface: 'rgba(20,20,20,0.92)',
+  tabBorder: 'rgba(255,255,255,0.08)',
 
-  danger: '#ef4444',
-  badgeGreenBg: '#f0fdf4',
-  badgeGreenFg: '#166534',
-  badgeRedBg: '#fef2f2',
-  badgeRedFg: '#991b1b',
+  // Accent (themed) — Prime Amber
+  accent: '#E8A83B',
+  accentDeep: '#B8391A',
+
+  // Macro palette (stable, not themed)
+  macroCal: '#6B8AFD',
+  macroP:   '#E25D2C',
+  macroF:   '#F5C54B',
+  macroC:   '#55C08C',
+
+  // Score buckets
+  scoreGreat: '#55C08C',
+  scoreOK:    '#F5C54B',
+  scoreSkip:  '#E25D2C',
+
+  // Legacy aliases kept so unported code still compiles
+  primaryLt: 'rgba(255,255,255,0.06)',
+  badgeGreenBg: 'rgba(85,192,140,0.16)',
+  badgeGreenFg: '#55C08C',
+  badgeRedBg: 'rgba(226,93,44,0.16)',
+  badgeRedFg: '#E25D2C',
+  scoreHighBg: 'rgba(85,192,140,0.16)',
+  scoreHighFg: '#55C08C',
+  scoreMidBg: 'rgba(245,197,75,0.16)',
+  scoreMidFg: '#F5C54B',
+  scoreLowBg: 'rgba(226,93,44,0.16)',
+  scoreLowFg: '#E25D2C',
+  surfaceAlt: 'rgba(255,255,255,0.06)',
 };
 
-export const radius = 6;
+export const radius = 14;
 
+export const MACRO = {
+  cal: colors.macroCal,
+  p:   colors.macroP,
+  f:   colors.macroF,
+  c:   colors.macroC,
+};
+
+// Font families. iOS will substitute system narrow/condensed if Barlow isn't loaded yet,
+// but App.tsx blocks render until @expo-google-fonts loads them.
+export const FONTS = {
+  // Body (Inter)
+  body:        'Inter_400Regular',
+  bodyMed:     'Inter_500Medium',
+  bodySemi:    'Inter_600SemiBold',
+  bodyBold:    'Inter_700Bold',
+
+  // Display — condensed (default)
+  displayMed:  'BarlowCondensed_500Medium',
+  displaySemi: 'BarlowCondensed_600SemiBold',
+  displayBold: 'BarlowCondensed_700Bold',
+  displayXBold:'BarlowCondensed_800ExtraBold',
+
+  // Display — clean alt (not currently exposed via UI but available)
+  cleanReg:    'SpaceGrotesk_400Regular',
+  cleanMed:    'SpaceGrotesk_500Medium',
+  cleanSemi:   'SpaceGrotesk_600SemiBold',
+  cleanBold:   'SpaceGrotesk_700Bold',
+
+  // Mono-ish numerals when display font isn't appropriate
+  systemMono:  Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' })!,
+};
+
+// Common typography presets
 export const type = {
-  h1: { fontSize: 22, fontWeight: '700' as const, letterSpacing: -0.8 },
-  h2: { fontSize: 16, fontWeight: '600' as const, letterSpacing: -0.3 },
-  h3: { fontSize: 13, fontWeight: '600' as const },
-  label: { fontSize: 11, fontWeight: '600' as const, color: colors.light, letterSpacing: 0.7 },
-  body: { fontSize: 13, color: colors.text },
-  muted: { fontSize: 13, color: colors.muted },
-  small: { fontSize: 12, color: colors.muted },
+  h1: { fontFamily: FONTS.displayBold, fontSize: 42, color: colors.text, letterSpacing: 0.4, textTransform: 'uppercase' as const, lineHeight: 42 },
+  h2: { fontFamily: FONTS.bodyBold,    fontSize: 22, color: colors.text, letterSpacing: -0.4 },
+  h3: { fontFamily: FONTS.bodySemi,    fontSize: 14, color: colors.text },
+  label: { fontFamily: FONTS.bodyBold, fontSize: 11, color: colors.light, letterSpacing: 1.3, textTransform: 'uppercase' as const },
+  body:  { fontFamily: FONTS.body,     fontSize: 14, color: colors.text },
+  muted: { fontFamily: FONTS.body,     fontSize: 13, color: colors.muted },
+  small: { fontFamily: FONTS.body,     fontSize: 12, color: colors.muted },
+  micro: { fontFamily: FONTS.body,     fontSize: 11, color: colors.light },
 };

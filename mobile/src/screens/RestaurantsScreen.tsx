@@ -1,3 +1,4 @@
+// Restaurants — real Google Places + score backend, dark NutriCoach styling.
 import React, { useCallback, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator,
@@ -6,12 +7,14 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import Slider from '@react-native-community/slider';
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+
 import { API_BASE } from '../config';
-import { colors, radius, type as T } from '../theme';
+import { colors, FONTS } from '../theme';
 import { getProfile } from '../storage';
 import { Profile, ScoredRestaurant } from '../types';
+import { Display, ICONS, ScoreBadge, SectionLabel } from '../components/atoms';
 
 interface NearbyPlace {
   place_id: string;
@@ -45,7 +48,6 @@ function formatDistance(m?: number | null) {
   const mi = metersToMiles(m);
   return mi < 0.1 ? `${Math.round(m)} ft` : `${mi.toFixed(1)} mi`;
 }
-
 function cuisineFromTypes(types: string[]): string {
   return types.filter((t) => !GENERIC_TYPES.has(t)).join(', ');
 }
@@ -65,19 +67,6 @@ async function geocodeAddress(query: string): Promise<{ lat: number; lon: number
   };
 }
 
-function ScoreCircle({ score }: { score: number }) {
-  const high = score >= 7;
-  const mid = score >= 5 && score < 7;
-  const bg = high ? colors.scoreHighBg : mid ? colors.scoreMidBg : colors.scoreLowBg;
-  const fg = high ? colors.scoreHighFg : mid ? colors.scoreMidFg : colors.scoreLowFg;
-  const border = high ? '#d1fae5' : mid ? '#fef08a' : '#fecaca';
-  return (
-    <View style={[styles.scoreCircle, { backgroundColor: bg, borderColor: border }]}>
-      <Text style={[styles.scoreText, { color: fg }]}>{score}</Text>
-    </View>
-  );
-}
-
 function StarRating({ rating }: { rating: number }) {
   const full = Math.floor(rating);
   const half = rating - full >= 0.5;
@@ -91,7 +80,6 @@ function StarRating({ rating }: { rating: number }) {
 }
 
 export default function RestaurantsScreen() {
-  const tabBarHeight = useBottomTabBarHeight();
   const [status, setStatus] = useState<Status>('idle');
   const [results, setResults] = useState<EnrichedResult[]>([]);
   const [allPlaces, setAllPlaces] = useState<NearbyPlace[]>([]);
@@ -102,11 +90,9 @@ export default function RestaurantsScreen() {
   const [addressInput, setAddressInput] = useState('');
   const [radiusMiles, setRadiusMiles] = useState(1);
 
-  useFocusEffect(
-    useCallback(() => {
-      (async () => setProfile(await getProfile()))();
-    }, [])
-  );
+  useFocusEffect(useCallback(() => {
+    (async () => setProfile(await getProfile()))();
+  }, []));
 
   async function searchWithCoords(lat: number, lon: number, locName?: string) {
     setStatus('fetching');
@@ -132,7 +118,6 @@ export default function RestaurantsScreen() {
       const data = await res.json();
       places = (data.places ?? []).slice(0, 20);
       setAllPlaces(places);
-
       if (!locName && places[0]?.address) {
         setLocationName(places[0].address.split(',').slice(-2).join(',').trim());
       }
@@ -222,60 +207,56 @@ export default function RestaurantsScreen() {
 
   const busy = status === 'locating' || status === 'fetching' || status === 'scoring';
 
+  // 0-10 score → 0-100 for ScoreBadge
+  const badgeScore = (s: number) => Math.round(s * 10);
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <ScrollView
-        contentContainerStyle={[styles.page, { paddingBottom: tabBarHeight + 24 }]}
-        keyboardShouldPersistTaps="handled"
-      >
-        <View style={{ marginBottom: 20 }}>
-          <Text style={T.h1}>Nearby Restaurants</Text>
-          <Text style={[T.muted, { marginTop: 4 }]}>
-            Find the healthiest options near you, scored for your goals.
-          </Text>
-        </View>
+      <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
+        <SectionLabel>Nearby</SectionLabel>
+        <Display style={{ marginTop: 6 }}>Restaurants</Display>
+        <Text style={styles.subtitle}>
+          Find the healthiest options near you, scored for your goals.
+        </Text>
 
         {profile?.restrictions?.length ? (
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
+          <View style={styles.chipRow}>
             {profile.restrictions.map((r) => (
-              <View key={r} style={styles.badgeGreen}>
-                <Text style={styles.badgeGreenText}>{r}</Text>
-              </View>
+              <View key={r} style={styles.tagChip}><Text style={styles.tagChipText}>{r}</Text></View>
             ))}
           </View>
         ) : null}
 
         {/* Search panel */}
-        <View style={[styles.card, { marginBottom: 16 }]}>
-          {/* GPS button — primary action */}
+        <View style={styles.card}>
           <TouchableOpacity
-            style={[styles.btn, styles.btnPrimary, busy && { opacity: 0.5 }]}
-            onPress={useGPS}
-            disabled={busy}
+            style={[styles.btnPrimary, busy && { opacity: 0.5 }]}
+            onPress={useGPS} disabled={busy}
           >
             {busy && status === 'locating' && !addressInput ? (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <ActivityIndicator color="#fff" size="small" />
+                <ActivityIndicator color="#111" size="small" />
                 <Text style={styles.btnPrimaryText}>Locating…</Text>
               </View>
             ) : (
-              <Text style={styles.btnPrimaryText}>📍  Use my current location</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Ionicons name={ICONS.pin} size={16} color="#111" />
+                <Text style={styles.btnPrimaryText}>Use my current location</Text>
+              </View>
             )}
           </TouchableOpacity>
 
-          {/* Divider */}
-          <View style={styles.dividerRow}>
+          <View style={styles.divider}>
             <View style={styles.dividerLine} />
             <Text style={styles.dividerText}>or</Text>
             <View style={styles.dividerLine} />
           </View>
 
-          {/* Address input */}
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <TextInput
               style={[styles.input, { flex: 1 }]}
               placeholder="City, zip code, or address"
-              placeholderTextColor={colors.light}
+              placeholderTextColor={colors.mutedSoft}
               value={addressInput}
               onChangeText={setAddressInput}
               editable={!busy}
@@ -283,40 +264,34 @@ export default function RestaurantsScreen() {
               onSubmitEditing={() => !busy && submitAddress()}
             />
             <TouchableOpacity
-              style={[styles.btn, styles.btnSecondary, (busy || !addressInput.trim()) && { opacity: 0.4 }]}
+              style={[styles.btnSecondary, (busy || !addressInput.trim()) && { opacity: 0.4 }]}
               onPress={submitAddress}
               disabled={busy || !addressInput.trim()}
             >
-              {busy && status === 'locating' && addressInput ? (
-                <ActivityIndicator color={colors.text} size="small" />
-              ) : (
-                <Text style={styles.btnSecondaryText}>Search</Text>
-              )}
+              {busy && status === 'locating' && addressInput
+                ? <ActivityIndicator color={colors.text} size="small" />
+                : <Text style={styles.btnSecondaryText}>Search</Text>}
             </TouchableOpacity>
           </View>
 
           <View style={styles.hr} />
 
-          {/* Cuisine keyword */}
           <View style={{ marginBottom: 14 }}>
-            <Text style={styles.labelText}>Cuisine (optional)</Text>
+            <Text style={styles.label}>Cuisine (optional)</Text>
             <TextInput
               style={styles.input}
               placeholder='e.g. "sushi", "salad", "healthy", "mexican"'
-              placeholderTextColor={colors.light}
+              placeholderTextColor={colors.mutedSoft}
               value={keyword}
               onChangeText={setKeyword}
               editable={!busy}
             />
           </View>
 
-          {/* Radius slider */}
           <View>
             <View style={styles.sliderHeader}>
-              <Text style={styles.labelText}>Search radius</Text>
-              <Text style={{ fontSize: 13, fontWeight: '600', color: colors.text }}>
-                {fmtMiles(radiusMiles)}
-              </Text>
+              <Text style={styles.label}>Search radius</Text>
+              <Text style={styles.radiusVal}>{fmtMiles(radiusMiles)}</Text>
             </View>
             <Slider
               minimumValue={0.25}
@@ -324,9 +299,9 @@ export default function RestaurantsScreen() {
               step={0.25}
               value={radiusMiles}
               onValueChange={setRadiusMiles}
-              minimumTrackTintColor={colors.text}
-              maximumTrackTintColor={colors.border}
-              thumbTintColor={colors.text}
+              minimumTrackTintColor={colors.accent}
+              maximumTrackTintColor={colors.borderStrong}
+              thumbTintColor={colors.accent}
               style={{ width: '100%', height: 32, marginTop: 2 }}
               disabled={busy}
             />
@@ -337,22 +312,20 @@ export default function RestaurantsScreen() {
           </View>
         </View>
 
-        {/* Loading */}
         {busy && (
-          <View style={[styles.card, { alignItems: 'center', paddingVertical: 40 }]}>
-            <ActivityIndicator size="large" color={colors.text} />
-            <Text style={[T.body, { fontWeight: '600', marginTop: 16 }]}>
+          <View style={[styles.card, { marginTop: 16, alignItems: 'center', paddingVertical: 36 }]}>
+            <ActivityIndicator size="large" color={colors.accent} />
+            <Text style={[styles.bodyText, { marginTop: 16, fontFamily: FONTS.bodySemi }]}>
               {status === 'locating' && 'Finding your location…'}
               {status === 'fetching' && 'Searching Google Places…'}
-              {status === 'scoring' && 'Scoring restaurants for your goals…'}
+              {status === 'scoring'  && 'Scoring restaurants for your goals…'}
             </Text>
             {(status === 'fetching' || status === 'scoring') && allPlaces.length > 0 && (
-              <Text style={[T.muted, { marginTop: 6 }]}>{allPlaces.length} places found</Text>
+              <Text style={[styles.muted, { marginTop: 6 }]}>{allPlaces.length} places found</Text>
             )}
           </View>
         )}
 
-        {/* Error */}
         {!busy && status === 'error' && (
           <View style={styles.errorCard}>
             <Text style={styles.errorTitle}>Could not load restaurants</Text>
@@ -360,53 +333,50 @@ export default function RestaurantsScreen() {
           </View>
         )}
 
-        {/* Results */}
         {!busy && status === 'done' && (
           <>
-            <View style={{ marginBottom: 12 }}>
-              <Text style={T.muted}>
-                Top picks near <Text style={{ fontWeight: '600', color: colors.text }}>{locationName || 'you'}</Text>
-                <Text style={{ color: colors.light }}>  ·  {allPlaces.length} found within {fmtMiles(radiusMiles)}</Text>
-              </Text>
-            </View>
+            <Text style={[styles.muted, { marginTop: 14, marginBottom: 12 }]}>
+              Top picks near <Text style={{ color: colors.text, fontFamily: FONTS.bodySemi }}>{locationName || 'you'}</Text>
+              <Text style={{ color: colors.light }}>  ·  {allPlaces.length} found within {fmtMiles(radiusMiles)}</Text>
+            </Text>
             <View style={{ gap: 10 }}>
               {results.map((r, i) => {
                 const p = r.place;
                 return (
-                  <View key={`${r.name}-${i}`} style={[styles.card, styles.restaurantItem]}>
-                    <ScoreCircle score={r.health_score} />
-                    <View style={{ flex: 1 }}>
-                      <View style={styles.nameRow}>
-                        <Text style={styles.nameText}>{r.name}</Text>
-                        {p?.open_now === true && (
-                          <View style={styles.badgeGreen}><Text style={styles.badgeGreenText}>Open</Text></View>
-                        )}
-                        {p?.open_now === false && (
-                          <View style={styles.badgeRed}><Text style={styles.badgeRedText}>Closed</Text></View>
-                        )}
-                        {p?.price_level != null && (
-                          <View style={styles.badgeGray}>
-                            <Text style={styles.badgeGrayText}>{PRICE_SYMBOLS[p.price_level]}</Text>
-                          </View>
-                        )}
-                      </View>
-
-                      {p && (p.rating != null || p.distance_meters != null || p.address) && (
-                        <View style={styles.metaRow}>
-                          {p.rating != null && <StarRating rating={p.rating} />}
-                          {p.distance_meters != null && (
-                            <Text style={[T.muted, { fontSize: 12 }]}>{formatDistance(p.distance_meters)}</Text>
+                  <View key={`${r.name}-${i}`} style={styles.resultCard}>
+                    <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
+                      <ScoreBadge score={badgeScore(r.health_score)} />
+                      <View style={{ flex: 1 }}>
+                        <View style={styles.nameRow}>
+                          <Text style={styles.nameText}>{r.name}</Text>
+                          {p?.open_now === true && (
+                            <View style={styles.openTag}><Text style={styles.openTagText}>Open</Text></View>
                           )}
-                          {!!p.address && (
-                            <Text style={[T.muted, { fontSize: 12, flexShrink: 1 }]} numberOfLines={1}>
-                              {p.address}
-                            </Text>
+                          {p?.open_now === false && (
+                            <View style={styles.closedTag}><Text style={styles.closedTagText}>Closed</Text></View>
+                          )}
+                          {p?.price_level != null && (
+                            <View style={styles.priceTag}>
+                              <Text style={styles.priceTagText}>{PRICE_SYMBOLS[p.price_level]}</Text>
+                            </View>
                           )}
                         </View>
-                      )}
-
-                      <Text style={styles.suggested}>Suggested: {r.suggested_order}</Text>
-                      <Text style={[T.muted, { marginTop: 4, fontSize: 13 }]}>{r.reasoning}</Text>
+                        {p && (p.rating != null || p.distance_meters != null || p.address) && (
+                          <View style={styles.metaRow}>
+                            {p.rating != null && <StarRating rating={p.rating} />}
+                            {p.distance_meters != null && (
+                              <Text style={styles.metaText}>{formatDistance(p.distance_meters)}</Text>
+                            )}
+                            {!!p.address && (
+                              <Text style={[styles.metaText, { flexShrink: 1 }]} numberOfLines={1}>
+                                {p.address}
+                              </Text>
+                            )}
+                          </View>
+                        )}
+                        <Text style={styles.suggested}>Suggested: {r.suggested_order}</Text>
+                        <Text style={[styles.muted, { marginTop: 4 }]}>{r.reasoning}</Text>
+                      </View>
                     </View>
                   </View>
                 );
@@ -421,88 +391,63 @@ export default function RestaurantsScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
-  page: { padding: 20, paddingBottom: 80 },
+  page: { padding: 20, paddingBottom: 180 },
+
+  subtitle: { marginTop: 6, fontSize: 13, color: colors.muted, fontFamily: FONTS.body, lineHeight: 19 },
+
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10, marginBottom: 4 },
+  tagChip: { backgroundColor: colors.surfaceStrong, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
+  tagChipText: { color: colors.text, fontSize: 12, fontFamily: FONTS.bodyMed },
+
   card: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius,
-    padding: 16,
+    marginTop: 16, padding: 16, borderRadius: 16,
+    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
   },
 
-  btn: {
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    borderRadius: radius,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  btnPrimary: { backgroundColor: colors.text },
-  btnPrimaryText: { color: '#fff', fontWeight: '600', fontSize: 14 },
-  btnSecondary: { backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border },
-  btnSecondaryText: { color: colors.text, fontWeight: '500', fontSize: 13 },
+  btnPrimary:    { backgroundColor: colors.accent, paddingVertical: 12, borderRadius: 999, alignItems: 'center' },
+  btnPrimaryText:{ color: '#111', fontSize: 14, fontFamily: FONTS.bodyBold },
+  btnSecondary:  { backgroundColor: colors.surfaceStrong, borderWidth: 1, borderColor: colors.borderStrong, paddingHorizontal: 16, justifyContent: 'center', borderRadius: 12 },
+  btnSecondaryText: { color: colors.text, fontSize: 13, fontFamily: FONTS.bodySemi },
 
-  dividerRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 10, marginVertical: 14,
-  },
+  divider:     { flexDirection: 'row', alignItems: 'center', gap: 10, marginVertical: 14 },
   dividerLine: { flex: 1, height: 1, backgroundColor: colors.border },
-  dividerText: { fontSize: 12, color: colors.light, fontWeight: '500' },
-  hr: { height: 1, backgroundColor: colors.border, marginVertical: 14 },
+  dividerText: { fontSize: 12, color: colors.mutedSoft, fontFamily: FONTS.bodyMed },
+  hr:          { height: 1, backgroundColor: colors.border, marginVertical: 14 },
 
   input: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius,
-    paddingHorizontal: 11,
-    paddingVertical: 9,
-    fontSize: 13,
-    color: colors.text,
-    backgroundColor: colors.bg,
+    borderWidth: 1, borderColor: colors.borderStrong, borderRadius: 12,
+    paddingHorizontal: 12, paddingVertical: 10,
+    fontSize: 13, color: colors.text, backgroundColor: colors.surfaceStrong, fontFamily: FONTS.body,
   },
-  labelText: { fontSize: 12, fontWeight: '500', color: colors.muted, marginBottom: 6 },
+  label: { fontSize: 12, color: colors.muted, marginBottom: 6, fontFamily: FONTS.bodyMed },
 
-  sliderHeader: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-  },
-  sliderTicks: { flexDirection: 'row', justifyContent: 'space-between', marginTop: -2 },
-  sliderTick: { fontSize: 11, color: colors.light },
+  sliderHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  radiusVal:    { fontSize: 13, color: colors.text, fontFamily: FONTS.bodySemi },
+  sliderTicks:  { flexDirection: 'row', justifyContent: 'space-between', marginTop: -2 },
+  sliderTick:   { fontSize: 11, color: colors.light, fontFamily: FONTS.body },
 
-  restaurantItem: { flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
-  nameRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 },
-  nameText: { fontSize: 15, fontWeight: '700', color: colors.text },
-  metaRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 10, marginTop: 4 },
-  stars: { fontSize: 12, color: '#ca8a04', letterSpacing: 1 },
-  suggested: { fontSize: 13, color: colors.text, fontWeight: '600', marginTop: 6 },
+  resultCard: {
+    padding: 14, borderRadius: 14,
+    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
+  },
+  nameRow:    { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginBottom: 4 },
+  nameText:   { fontSize: 15, fontFamily: FONTS.bodyBold, color: colors.text },
+  metaRow:    { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 10, marginTop: 2 },
+  metaText:   { fontSize: 12, color: colors.muted, fontFamily: FONTS.body },
+  stars:      { fontSize: 12, color: '#F5C54B', letterSpacing: 1 },
+  suggested:  { fontSize: 13, color: colors.text, fontFamily: FONTS.bodySemi, marginTop: 6 },
 
-  scoreCircle: {
-    width: 36, height: 36, borderRadius: 18, borderWidth: 1,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  scoreText: { fontSize: 13, fontWeight: '700' },
+  openTag:        { backgroundColor: colors.scoreGreat + '22', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999 },
+  openTagText:    { color: colors.scoreGreat, fontSize: 11, fontFamily: FONTS.bodySemi },
+  closedTag:      { backgroundColor: colors.scoreSkip + '22', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999 },
+  closedTagText:  { color: colors.scoreSkip, fontSize: 11, fontFamily: FONTS.bodySemi },
+  priceTag:       { backgroundColor: colors.surfaceStrong, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999 },
+  priceTagText:   { color: colors.muted, fontSize: 11, fontFamily: FONTS.bodySemi },
 
-  badgeGreen: {
-    backgroundColor: colors.badgeGreenBg,
-    paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4,
-  },
-  badgeGreenText: { color: colors.badgeGreenFg, fontSize: 11, fontWeight: '500' },
-  badgeRed: {
-    backgroundColor: colors.badgeRedBg,
-    paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4,
-  },
-  badgeRedText: { color: colors.badgeRedFg, fontSize: 11, fontWeight: '500' },
-  badgeGray: {
-    backgroundColor: colors.primaryLt,
-    paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4,
-  },
-  badgeGrayText: { color: colors.muted, fontSize: 11, fontWeight: '500' },
+  errorCard:  { marginTop: 16, backgroundColor: colors.scoreSkip + '15', borderWidth: 1, borderColor: colors.scoreSkip + '40', padding: 16, borderRadius: 14 },
+  errorTitle: { color: colors.scoreSkip, fontFamily: FONTS.bodyBold, fontSize: 13, marginBottom: 4 },
+  errorBody:  { color: colors.scoreSkip, fontFamily: FONTS.body, fontSize: 13 },
 
-  errorCard: {
-    backgroundColor: '#fef2f2',
-    borderWidth: 1,
-    borderColor: '#fecaca',
-    borderRadius: radius,
-    padding: 16,
-  },
-  errorTitle: { fontWeight: '600', color: '#991b1b', marginBottom: 4, fontSize: 13 },
-  errorBody: { fontSize: 13, color: '#b91c1c' },
+  bodyText: { fontSize: 14, color: colors.text, fontFamily: FONTS.body },
+  muted:    { fontSize: 13, color: colors.muted, fontFamily: FONTS.body },
 });
