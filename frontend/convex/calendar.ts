@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { action, query } from "./_generated/server";
+import { components } from "./_generated/api";
 import { authComponent } from "./auth_component";
 
 const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
@@ -13,7 +14,7 @@ function hasScope(scopeString: string | null | undefined, requiredScope: string)
 }
 
 async function getAccounts(ctx: any, userId: string) {
-  return await ctx.runQuery(authComponent.adapter.findMany, {
+  return await ctx.runQuery(components.betterAuth.adapter.findMany, {
     model: "account",
     where: [{ field: "userId", value: userId }],
   });

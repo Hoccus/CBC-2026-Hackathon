@@ -1,8 +1,10 @@
 "use client";
 
 import { api } from "@convex/_generated/api";
+import OnboardingForm, { MacroOnboardingFormData } from "@/components/OnboardingForm";
 import { DEFAULT_PROFILE, Profile } from "@/lib/persistence";
 import { useMutation, useQuery } from "convex/react";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 const RESTRICTIONS = [
@@ -11,11 +13,11 @@ const RESTRICTIONS = [
 ];
 
 const ACTIVITY = [
-  { value: "sedentary", label: "Sedentary", factor: 1.2 },
-  { value: "light", label: "Lightly active (1-3×/wk)", factor: 1.375 },
-  { value: "moderate", label: "Moderately active (3-5×/wk)", factor: 1.55 },
-  { value: "active", label: "Very active (6-7×/wk)", factor: 1.725 },
-  { value: "extra", label: "Extra active (physical job)", factor: 1.9 },
+  { value: "sedentary", label: "Sedentary", factor: 1.2, macroLevel: 1.2 },
+  { value: "light", label: "Lightly active (1-3x/wk)", factor: 1.375, macroLevel: 1.375 },
+  { value: "moderate", label: "Moderately active (3-5x/wk)", factor: 1.55, macroLevel: 1.55 },
+  { value: "active", label: "Very active (6-7x/wk)", factor: 1.725, macroLevel: 1.725 },
+  { value: "extra", label: "Extra active (physical job)", factor: 1.9, macroLevel: 1.9 },
 ];
 
 type CalBrand = "google" | "outlook";
@@ -58,6 +60,29 @@ interface ApiCalendarEvent {
   is_all_day: boolean;
 }
 
+interface MacroResponse {
+  current_macros: {
+    consumed: {
+      calories: number;
+      protein_g: number;
+      carbs_g: number;
+      fat_g: number;
+    };
+    target: {
+      calories: number;
+      protein_g: number;
+      carbs_g: number;
+      fat_g: number;
+    };
+    remaining: {
+      calories: number;
+      protein_g: number;
+      carbs_g: number;
+      fat_g: number;
+    };
+  };
+}
+
 const EMPTY_CONNECTIONS: Record<CalBrand, CalendarConnection> = {
   google: { provider: "google", state: "idle", title: "Google Calendar", account_email: null },
   outlook: { provider: "outlook", state: "idle", title: "Outlook", account_email: null },
@@ -91,7 +116,14 @@ function calcTDEE(profile: Profile): { calories: number; protein: number; carbs:
   };
 }
 
+function mapActivityLevel(activityLevel: number) {
+  return (
+    ACTIVITY.find((option) => option.macroLevel === activityLevel)?.value ?? "moderate"
+  );
+}
+
 export default function ProfilePage() {
+  const router = useRouter();
   const storedProfile = useQuery(api.profiles.getMine);
   const saveProfile = useMutation(api.profiles.upsertMine);
   const [profile, setProfile] = useState<Profile>(DEFAULT_PROFILE);
@@ -102,6 +134,7 @@ export default function ProfilePage() {
   const [connections, setConnections] = useState<Record<CalBrand, CalendarConnection>>(EMPTY_CONNECTIONS);
   const [calendarGroups, setCalendarGroups] = useState<Array<{ key: string; label: string; items: CalEvent[] }>>([]);
   const [calendarMessage, setCalendarMessage] = useState<string | null>(null);
+  const [onboardingError, setOnboardingError] = useState<string | null>(null);
 
   useEffect(() => {
     if (storedProfile) {
@@ -110,6 +143,10 @@ export default function ProfilePage() {
   }, [storedProfile]);
 
   useEffect(() => {
+    if (!storedProfile) {
+      return;
+    }
+
     const params = new URLSearchParams(window.location.search);
     const connected = params.get("calendar_connected");
     const error = params.get("calendar_error");
@@ -122,7 +159,7 @@ export default function ProfilePage() {
       window.history.replaceState({}, "", "/profile");
     }
     void refreshCalendar();
-  }, []);
+  }, [storedProfile]);
 
   const googleState: CalState = googleSyncing
     ? "syncing"
@@ -134,6 +171,102 @@ export default function ProfilePage() {
     : connections.outlook.state === "connected"
       ? "connected"
       : "idle";
+
+  const totalEvents = calendarGroups.reduce((n, g) => n + g.items.length, 0);
+  const highRisk = calendarGroups.reduce(
+    (n, g) => n + g.items.filter((e) => e.risk === "high").length,
+    0
+  );
+  const googleEventCount = useMemo(
+    () => calendarGroups.flatMap((group) => group.items).filter((event) => event.source === "google").length,
+    [calendarGroups]
+  );
+  const outlookEventCount = useMemo(
+    () => calendarGroups.flatMap((group) => group.items).filter((event) => event.source === "outlook").length,
+    [calendarGroups]
+  );
+
+  function update(field: string, value: unknown) {
+    setProfile((prev) => ({ ...prev, [field]: value }));
+    setSaved(false);
+  }
+
+  function toggleRestriction(r: string) {
+    setProfile((prev) => {
+      const has = prev.restrictions.includes(r);
+      return {
+        ...prev,
+        restrictions: has
+          ? prev.restrictions.filter((x) => x !== r)
+          : [...prev.restrictions, r],
+      };
+    });
+    setSaved(false);
+  }
+
+  function autoCalc() {
+    const goals = calcTDEE(profile);
+    setProfile((prev) => ({ ...prev, goals }));
+    setSaved(false);
+  }
+
+  async function save() {
+    setSaving(true);
+    try {
+      await saveProfile(profile);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleOnboardingSubmit(formData: MacroOnboardingFormData) {
+    setSaving(true);
+    setOnboardingError(null);
+    try {
+      const response = await fetch("/api/profile/calculate-macros", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(formData),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to calculate macros.");
+      }
+
+      const data = (await response.json()) as MacroResponse;
+      const nextProfile: Profile = {
+        ...DEFAULT_PROFILE,
+        age: formData.age,
+        height: formData.height_cm,
+        weight: formData.weight_kg,
+        gender: formData.gender,
+        activity: mapActivityLevel(formData.activity_level),
+        goals: {
+          calories: Math.round(data.current_macros.target.calories),
+          protein: Math.round(data.current_macros.target.protein_g),
+          carbs: Math.round(data.current_macros.target.carbs_g),
+          fat: Math.round(data.current_macros.target.fat_g),
+        },
+      };
+
+      localStorage.setItem("macroData", JSON.stringify(data.current_macros));
+      await saveProfile(nextProfile);
+      setProfile(nextProfile);
+      router.push("/dashboard");
+    } catch (error) {
+      setOnboardingError(
+        error instanceof Error
+          ? error.message
+          : "Failed to connect to the backend. Make sure the API is running.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function connectCalendar(brand: CalBrand) {
     const setter = brand === "google" ? setGoogleSyncing : setOutlookSyncing;
@@ -188,47 +321,36 @@ export default function ProfilePage() {
     }
   }
 
-  const totalEvents = calendarGroups.reduce((n, g) => n + g.items.length, 0);
-  const highRisk = calendarGroups.reduce(
-    (n, g) => n + g.items.filter((e) => e.risk === "high").length, 0
-  );
-  const googleEventCount = useMemo(
-    () => calendarGroups.flatMap((group) => group.items).filter((event) => event.source === "google").length,
-    [calendarGroups]
-  );
-  const outlookEventCount = useMemo(
-    () => calendarGroups.flatMap((group) => group.items).filter((event) => event.source === "outlook").length,
-    [calendarGroups]
-  );
-
-  function update(field: string, value: unknown) {
-    setProfile((prev) => ({ ...prev, [field]: value }));
-    setSaved(false);
+  if (storedProfile === undefined) {
+    return (
+      <main className="page" style={{ display: "grid", placeItems: "center", minHeight: "calc(100vh - var(--nav-h))" }}>
+        <p className="text-muted">Loading profile...</p>
+      </main>
+    );
   }
 
-  function toggleRestriction(r: string) {
-    setProfile((prev) => {
-      const has = prev.restrictions.includes(r);
-      return { ...prev, restrictions: has ? prev.restrictions.filter((x) => x !== r) : [...prev.restrictions, r] };
-    });
-    setSaved(false);
-  }
-
-  function autoCalc() {
-    const goals = calcTDEE(profile);
-    setProfile((prev) => ({ ...prev, goals }));
-    setSaved(false);
-  }
-
-  async function save() {
-    setSaving(true);
-    try {
-      await saveProfile(profile);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-    } finally {
-      setSaving(false);
-    }
+  if (storedProfile === null) {
+    return (
+      <>
+        {onboardingError ? (
+          <div className="page" style={{ paddingBottom: 0 }}>
+            <div className="badge badge-red" style={{ display: "block", padding: "10px 12px", borderRadius: 10 }}>
+              {onboardingError}
+            </div>
+          </div>
+        ) : null}
+        {saving ? (
+          <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600 mx-auto mb-4" />
+              <p className="text-xl text-gray-700">Calculating your macros...</p>
+            </div>
+          </div>
+        ) : (
+          <OnboardingForm onSubmit={handleOnboardingSubmit} />
+        )}
+      </>
+    );
   }
 
   return (
@@ -238,7 +360,6 @@ export default function ProfilePage() {
         <p className="text-muted mt-1">Personalizes coach advice and macro goals.</p>
       </div>
 
-      {/* Calendar Sync */}
       <div className="card mb-4">
         <div className="section-header">
           <h2 className="h3">Calendar Sync</h2>
@@ -300,7 +421,6 @@ export default function ProfilePage() {
         )}
       </div>
 
-      {/* Personal Info */}
       <div className="card mb-4">
         <h2 className="h3 mb-4">About You</h2>
         <div className="form-section">
@@ -341,7 +461,6 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* Dietary Restrictions */}
       <div className="card mb-4">
         <h2 className="h3 mb-4">Dietary Restrictions</h2>
         <div className="check-grid">
@@ -354,7 +473,6 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* Nutrition Goals */}
       <div className="card mb-6">
         <div className="section-header">
           <h2 className="h3">Daily Nutrition Goals</h2>
@@ -554,7 +672,7 @@ function CalendarSource({
         </span>
         <span className="cal-src-sub">
           {syncing
-            ? "Discovering events…"
+            ? "Discovering events..."
             : connected
             ? `${account} · ${eventCount} events synced`
             : account}

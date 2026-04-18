@@ -7,11 +7,12 @@ import { useState } from "react";
 import { authClient } from "@/lib/auth-client";
 
 const links = [
-  { href: "/", label: "Dashboard" },
+  { href: "/", label: "Home" },
   { href: "/coach", label: "Coach" },
   { href: "/track", label: "Track" },
   { href: "/restaurants", label: "Restaurants" },
   { href: "/profile", label: "Profile" },
+  { href: "/dashboard", label: "Dashboard" },
 ];
 
 export default function Nav() {

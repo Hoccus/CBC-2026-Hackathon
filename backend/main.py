@@ -7,7 +7,7 @@ load_dotenv()
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from routers import calendar, coach, meals, track, restaurants
+from routers import calendar, coach, meals, profile, restaurants, track
 
 app = FastAPI(title="NutriCoach API", version="0.1.0")
 frontend_origin = os.getenv("FRONTEND_APP_URL", "http://localhost:3000")
@@ -25,6 +25,7 @@ app.include_router(coach.router, prefix="/api/coach", tags=["coach"])
 app.include_router(meals.router, prefix="/api/meals", tags=["meals"])
 app.include_router(track.router, prefix="/api/track", tags=["track"])
 app.include_router(restaurants.router, prefix="/api/restaurants", tags=["restaurants"])
+app.include_router(profile.router, prefix="/api/profile", tags=["profile"])
 
 
 @app.get("/health")

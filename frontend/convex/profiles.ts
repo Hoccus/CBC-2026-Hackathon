@@ -40,7 +40,7 @@ export const getMine = query({
       .unique();
 
     if (!profile) {
-      return DEFAULT_PROFILE;
+      return null;
     }
 
     return {
@@ -88,27 +88,5 @@ export const upsertMine = mutation({
     }
 
     return await ctx.db.insert("profiles", payload);
-  },
-});
-
-export const ensureMine = mutation({
-  args: {},
-  handler: async (ctx) => {
-    const user = await authComponent.getAuthUser(ctx);
-    const existing = await ctx.db
-      .query("profiles")
-      .withIndex("userId", (q) => q.eq("userId", user._id))
-      .unique();
-
-    if (existing) {
-      return existing._id;
-    }
-
-    return await ctx.db.insert("profiles", {
-      ...DEFAULT_PROFILE,
-      name: user.name || "",
-      userId: user._id,
-      updatedAt: Date.now(),
-    });
   },
 });
