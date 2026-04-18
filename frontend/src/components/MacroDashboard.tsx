@@ -1,6 +1,5 @@
 'use client'
 
-import { useState } from 'react'
 import CircularProgress from './CircularProgress'
 import { Apple, ChevronLeft } from 'lucide-react'
 
@@ -87,7 +86,7 @@ export default function MacroDashboard({ macroData, onBack }: MacroDashboardProp
           <div className="flex items-center gap-3">
             <Apple className="text-green-600" size={32} />
             <div>
-              <h1 className="text-3xl font-bold text-gray-800">Today's Macros</h1>
+              <h1 className="text-3xl font-bold text-gray-800">Today&apos;s Macros</h1>
               <p className="text-gray-600">Track your nutrition on the go</p>
             </div>
           </div>
