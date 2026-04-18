@@ -54,13 +54,10 @@ frontend/src/components/prototype/
   shell.tsx               # IOSStatusBar, TabBar (w/ FAB), LogSheet, TweaksPanel
 ```
 
-## Porting to the mobile app
+## Mobile port status
 
-The prototype is the target visual spec for a future port of [mobile/](../mobile/) from its current minimal light-mode design into this dark travel-journalist style. Rough work to do:
+Phase 1 (UI port) is **shipped** in [mobile/](../mobile/) — the React Native app now matches this prototype's look. See [docs/mobile-app.md](mobile-app.md) for the screen-by-screen rundown and Phase 2 backend-wiring punch list. Notable departures from the web prototype:
 
-1. Rewrite [mobile/src/theme.ts](../mobile/src/theme.ts) with the dark palette + `MACRO` colors.
-2. Load Barlow Condensed / Space Grotesk via `expo-font`.
-3. Add a parallel `mobile/src/data.ts` mirroring the web `data.ts`.
-4. Rewrite each screen: `HomeScreen` → Dashboard, new `PlanScreen` + `FoodLogScreen`, rewrite `CoachScreen`, rewrite `ProfileScreen` as `MoreScreen`.
-5. Swap CSS gradients for `expo-linear-gradient`, inline styles for `StyleSheet`.
-6. Update the tab bar to match (dark glass, centered FAB, re-ordered tabs: Dashboard / Food Log / + / Plan / More).
+- The mobile app has no iOS device frame — it runs on the real device.
+- The tab bar is **Dashboard / Food Log / [FAB] / Restaurants / More** (Plan moved to a stack-pushed screen reachable from Dashboard) so the user's working Google Places `RestaurantsScreen` keeps a top-level slot.
+- `TweaksPanel` (accent / display-type swap) is web-only — not ported.

@@ -1,267 +1,214 @@
-import React, { useRef, useState } from 'react';
+// Coach — situation-aware chat (full-screen modal). Uses fake prototype thread for Phase 1.
+import React, { useState } from 'react';
 import {
-  View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView,
-  KeyboardAvoidingView, Platform, ActivityIndicator, Modal, Pressable,
+  KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text,
+  TextInput, TouchableOpacity, View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
-import { useMutation, useQuery } from 'convex/react';
-import { API_BASE } from '../config';
-import { colors, radius, type as T } from '../theme';
-import { api } from '../convexApi';
+import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 
-const CONTEXTS = [
-  { value: '', label: 'Select situation...' },
-  { value: 'at home — have access to a full kitchen', label: 'At home' },
-  { value: 'at the airport', label: 'Airport' },
-  { value: 'on the road — gas stations and fast food only', label: 'On the road' },
-  { value: 'at a hotel — maybe a minibar and room service', label: 'Hotel' },
-  { value: 'at a restaurant — can order anything', label: 'Restaurant' },
-  { value: 'at a convenience store', label: 'Convenience store' },
+import { colors, FONTS, MACRO } from '../theme';
+import { COACH_THREAD, FOOD_OPTIONS, USER } from '../data';
+import { ICONS, ScoreBadge } from '../components/atoms';
+
+const QUICK_PROMPTS = [
+  "What's near me?",
+  'Skip lunch — is that ok?',
+  'Airport dinner options',
+  'Cut fat today',
 ];
 
 export default function CoachScreen() {
-  const tabBarHeight = useBottomTabBarHeight();
+  const nav = useNavigation();
   const [input, setInput] = useState('');
-  const [context, setContext] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const scrollRef = useRef<ScrollView>(null);
-  const profile = useQuery(api.profiles.getMine) ?? null;
-  const messages = useQuery(api.coach.listMine) ?? [];
-  const addMessage = useMutation(api.coach.addMessage);
-
-  async function send() {
-    const text = input.trim();
-    if (!text || loading) return;
-    setInput('');
-    setLoading(true);
-    try {
-      await addMessage({ role: 'user', content: text, context: context || undefined });
-      const profileCtx = profile
-        ? `${profile.restrictions.length ? 'Restrictions: ' + profile.restrictions.join(', ') + '. ' : ''}Goal: ${profile.goals.calories} kcal, ${profile.goals.protein}g protein.`
-        : '';
-      const res = await fetch(`${API_BASE}/api/coach/advice`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: text,
-          context: context || undefined,
-          profile_context: profileCtx || undefined,
-        }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      await addMessage({
-        role: 'assistant',
-        content: data.advice ?? '',
-        context: context || undefined,
-      });
-    } catch {
-      await addMessage({
-        role: 'assistant',
-        content: 'Something went wrong. Please try again.',
-        context: context || undefined,
-      });
-    } finally {
-      setLoading(false);
-      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50);
-    }
-  }
-
-  const contextLabel = CONTEXTS.find((c) => c.value === context)?.label ?? CONTEXTS[0].label;
+  const remainingCal = USER.goals.cal - USER.today.cal;
+  const lunchOpts = FOOD_OPTIONS[0].items;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => nav.goBack()} style={styles.closeBtn}>
+          <Ionicons name={ICONS.close} size={16} color="#fff" />
+        </TouchableOpacity>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.title}>COACH</Text>
+          <View style={styles.statusRow}>
+            <View style={styles.statusDot} />
+            <Text style={styles.statusText}>Live · sees your calendar &amp; macros</Text>
+          </View>
+        </View>
+        <View style={styles.kcalChip}>
+          <Text style={styles.kcalText}>{remainingCal} kcal left</Text>
+        </View>
+      </View>
+
       <KeyboardAvoidingView
-        style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={90}
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
       >
-        <View style={styles.header}>
-          <Text style={T.h1}>Coach</Text>
-          {profile?.name && (
-            <Text style={[T.muted, { marginTop: 4 }]}>
-              {profile.name} · {profile.goals.calories} kcal goal
-            </Text>
-          )}
-        </View>
-
-        <View style={styles.contextBar}>
-          <Text style={styles.contextLabel}>WHERE ARE YOU?</Text>
-          <TouchableOpacity style={styles.contextSelect} onPress={() => setPickerOpen(true)}>
-            <Text style={{ fontSize: 13, color: colors.text }}>{contextLabel}</Text>
-            <Text style={{ fontSize: 11, color: colors.light }}>▼</Text>
-          </TouchableOpacity>
-        </View>
-
         <ScrollView
-          ref={scrollRef}
-          style={styles.chatWrap}
-          contentContainerStyle={{ padding: 16, gap: 8 }}
-          onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
+          contentContainerStyle={{ padding: 16, paddingBottom: 20, gap: 12 }}
+          keyboardShouldPersistTaps="handled"
         >
-          {messages.length === 0 && (
-            <View style={styles.empty}>
-              <Text style={[T.body, { fontWeight: '600' }]}>Ask your nutrition coach</Text>
-              <Text style={[T.small, { marginTop: 6, textAlign: 'center', color: colors.light }]}>
-                &ldquo;What should I eat at the airport?&rdquo;{'\n'}
-                &ldquo;I have eggs, spinach, and cheese — what can I make?&rdquo;
-              </Text>
-            </View>
-          )}
-          {messages.map((m: { id: string; role: 'user' | 'assistant'; content: string }, i: number) => (
-            <View
-              key={m.id ?? i}
-              style={[styles.bubble, m.role === 'user' ? styles.user : styles.assistant]}
-            >
-              <Text
-                style={[styles.bubbleText, { color: m.role === 'user' ? '#fff' : colors.text }]}
-              >
-                {m.content}
-              </Text>
-            </View>
-          ))}
-          {loading && (
-            <View style={[styles.bubble, styles.assistant, { flexDirection: 'row', gap: 8, alignItems: 'center' }]}>
-              <ActivityIndicator size="small" color={colors.light} />
-              <Text style={[T.small, { color: colors.light }]}>Thinking...</Text>
-            </View>
-          )}
+          {COACH_THREAD.map((m, i) => {
+            if (m.role === 'context') {
+              return (
+                <View key={i} style={styles.contextBubble}>
+                  <Ionicons name={ICONS.calendar} size={13} color={colors.mutedSoft} style={{ marginTop: 1 }} />
+                  <Text style={styles.contextText}>{m.text}</Text>
+                </View>
+              );
+            }
+            if (m.role === 'user') {
+              return (
+                <View key={i} style={styles.userBubble}>
+                  <Text style={styles.userText}>{m.text}</Text>
+                </View>
+              );
+            }
+            return (
+              <View key={i} style={{ alignSelf: 'flex-start', maxWidth: '88%' }}>
+                <View style={styles.coachKicker}>
+                  <Ionicons name={ICONS.sparkle} size={12} color={colors.accent} />
+                  <Text style={styles.coachKickerText}>COACH</Text>
+                </View>
+                <View style={styles.coachBubble}>
+                  <Text style={styles.coachText}>
+                    {m.text.split('**').map((seg, j) => j % 2 === 1
+                      ? <Text key={j} style={{ color: colors.accent, fontFamily: FONTS.bodyBold }}>{seg}</Text>
+                      : <Text key={j}>{seg}</Text>
+                    )}
+                  </Text>
+                </View>
+                {m.suggestions && (
+                  <View style={{ marginTop: 10, gap: 8 }}>
+                    {lunchOpts.slice(0, 2).map((opt, k) => (
+                      <View key={k} style={styles.suggestion}>
+                        <View style={[styles.suggestionIcon, {
+                          backgroundColor: (k === 0 ? MACRO.cal : MACRO.p) + '22',
+                        }]}>
+                          <Text style={{ fontSize: 18 }}>{k === 0 ? '🥗' : '🍗'}</Text>
+                        </View>
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                            <Text style={styles.suggestionName}>{opt.name}</Text>
+                            <ScoreBadge score={opt.score} />
+                          </View>
+                          <Text style={styles.suggestionMeta} numberOfLines={1}>
+                            {opt.pick} · {opt.macros.cal} kcal · {opt.macros.p}g P · {opt.eta} away
+                          </Text>
+                        </View>
+                        <TouchableOpacity style={styles.logBtn}>
+                          <Text style={styles.logBtnText}>Log</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
+            );
+          })}
         </ScrollView>
 
-        <View style={[styles.inputRow, { paddingBottom: tabBarHeight + 8 }]}>
-          <TextInput
-            value={input}
-            onChangeText={setInput}
-            placeholder="What's in your fridge? What's on the menu?"
-            placeholderTextColor={colors.light}
-            style={styles.input}
-            multiline
-          />
-          <TouchableOpacity
-            style={[styles.sendBtn, (!input.trim() || loading) && { opacity: 0.35 }]}
-            onPress={send}
-            disabled={!input.trim() || loading}
-          >
-            <Text style={styles.sendBtnText}>Send</Text>
+        <ScrollView
+          horizontal showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 10, gap: 8 }}
+          keyboardShouldPersistTaps="handled"
+        >
+          {QUICK_PROMPTS.map((q) => (
+            <TouchableOpacity key={q} onPress={() => setInput(q)} style={styles.quickChip}>
+              <Text style={styles.quickChipText}>{q}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        <View style={styles.composer}>
+          <View style={styles.composerInput}>
+            <TextInput
+              value={input}
+              onChangeText={setInput}
+              placeholder="Ask about this moment…"
+              placeholderTextColor={colors.mutedSoft}
+              style={styles.composerField}
+            />
+            <Ionicons name={ICONS.mic} size={16} color={colors.mutedSoft} />
+          </View>
+          <TouchableOpacity style={styles.sendBtn}>
+            <Ionicons name={ICONS.send} size={18} color="#111" />
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
-
-      <Modal transparent visible={pickerOpen} animationType="fade" onRequestClose={() => setPickerOpen(false)}>
-        <Pressable style={styles.modalBg} onPress={() => setPickerOpen(false)}>
-          <View style={styles.modalSheet}>
-            <Text style={styles.modalTitle}>Where are you?</Text>
-            {CONTEXTS.map((c) => (
-              <TouchableOpacity
-                key={c.value || 'none'}
-                style={styles.modalItem}
-                onPress={() => {
-                  setContext(c.value);
-                  setPickerOpen(false);
-                }}
-              >
-                <Text
-                  style={{
-                    fontSize: 14,
-                    color: colors.text,
-                    fontWeight: c.value === context ? '600' : '400',
-                  }}
-                >
-                  {c.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </Pressable>
-      </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
-  header: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 12 },
-  contextBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginHorizontal: 20,
-    marginBottom: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius,
+
+  header: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingHorizontal: 16, paddingVertical: 12,
+    borderBottomWidth: 1, borderBottomColor: colors.border,
   },
-  contextLabel: { fontSize: 11, fontWeight: '600', color: colors.light, letterSpacing: 0.7 },
-  contextSelect: {
-    flex: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 5,
+  closeBtn: {
+    width: 36, height: 36, borderRadius: 999,
+    backgroundColor: colors.surfaceStrong,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  title: { fontFamily: FONTS.displayBold, fontSize: 22, color: colors.text, letterSpacing: 0.4 },
+  statusRow:  { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 },
+  statusDot:  { width: 6, height: 6, borderRadius: 999, backgroundColor: colors.accent },
+  statusText: { fontSize: 11, color: colors.accent, fontFamily: FONTS.body },
+  kcalChip:   { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, backgroundColor: colors.surfaceStrong },
+  kcalText:   { fontSize: 11, color: colors.muted, fontFamily: FONTS.bodySemi },
+
+  contextBubble: {
+    alignSelf: 'center', maxWidth: '88%', flexDirection: 'row', gap: 6,
+    paddingHorizontal: 12, paddingVertical: 9, borderRadius: 10,
+    backgroundColor: colors.surface, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
+    borderStyle: 'dashed',
+  },
+  contextText: { flex: 1, fontSize: 11, color: colors.muted, fontFamily: FONTS.body, lineHeight: 16 },
+
+  userBubble:   { alignSelf: 'flex-end', maxWidth: '82%', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 18, backgroundColor: '#fff' },
+  userText:     { color: '#111', fontSize: 14, fontFamily: FONTS.bodyMed, lineHeight: 20 },
+
+  coachKicker:     { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
+  coachKickerText: { fontSize: 11, color: colors.accent, fontFamily: FONTS.bodyBold, letterSpacing: 0.9 },
+  coachBubble:     { paddingHorizontal: 14, paddingVertical: 12, borderRadius: 18, backgroundColor: colors.surfaceStrong },
+  coachText:       { fontSize: 14, color: colors.text, fontFamily: FONTS.body, lineHeight: 21 },
+
+  suggestion: {
+    flexDirection: 'row', gap: 12, alignItems: 'center', padding: 12,
+    borderRadius: 14, backgroundColor: colors.surface,
+    borderWidth: 1, borderColor: colors.borderStrong,
+  },
+  suggestionIcon: { width: 42, height: 42, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  suggestionName: { fontSize: 13, fontFamily: FONTS.bodyBold, color: colors.text },
+  suggestionMeta: { fontSize: 11, color: colors.muted, fontFamily: FONTS.body },
+  logBtn:         { backgroundColor: '#fff', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
+  logBtnText:     { color: '#111', fontSize: 11, fontFamily: FONTS.bodyBold },
+
+  quickChip: {
+    backgroundColor: colors.surfaceStrong, borderWidth: 1, borderColor: colors.borderStrong,
+    paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999,
+  },
+  quickChipText: { color: colors.text, fontSize: 12, fontFamily: FONTS.bodyMed },
+
+  composer: {
+    flexDirection: 'row', gap: 8, alignItems: 'center',
+    paddingHorizontal: 14, paddingTop: 10, paddingBottom: 16,
+    borderTopWidth: 1, borderTopColor: colors.border,
     backgroundColor: colors.bg,
   },
-  chatWrap: {
-    flex: 1,
-    marginHorizontal: 20,
-    backgroundColor: colors.bg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius,
-    marginBottom: 12,
+  composerInput: {
+    flex: 1, backgroundColor: colors.surfaceStrong, borderRadius: 999,
+    borderWidth: 1, borderColor: colors.borderStrong,
+    paddingHorizontal: 14, paddingVertical: Platform.OS === 'ios' ? 10 : 6,
+    flexDirection: 'row', alignItems: 'center', gap: 8,
   },
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 48 },
-  bubble: { padding: 10, borderRadius: radius, maxWidth: '80%' },
-  user: { alignSelf: 'flex-end', backgroundColor: colors.text },
-  assistant: {
-    alignSelf: 'flex-start',
-    backgroundColor: colors.primaryLt,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  bubbleText: { fontSize: 13, lineHeight: 20 },
-  inputRow: {
-    flexDirection: 'row',
-    gap: 8,
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-    alignItems: 'flex-end',
-  },
-  input: {
-    flex: 1,
-    backgroundColor: colors.bg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius,
-    paddingHorizontal: 11,
-    paddingVertical: 9,
-    color: colors.text,
-    maxHeight: 100,
-    fontSize: 13,
-  },
-  sendBtn: {
-    backgroundColor: colors.text,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: radius,
-  },
-  sendBtnText: { color: '#fff', fontWeight: '600', fontSize: 13 },
-  modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
-  modalSheet: {
-    backgroundColor: colors.bg,
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 32,
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-  },
-  modalTitle: { fontSize: 13, fontWeight: '600', color: colors.light, letterSpacing: 0.7, marginBottom: 12 },
-  modalItem: { paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.border },
+  composerField: { flex: 1, color: colors.text, fontSize: 14, fontFamily: FONTS.body },
+  sendBtn:       { width: 42, height: 42, borderRadius: 999, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
 });
