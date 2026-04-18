@@ -13,4 +13,4 @@ if [ ! -f ".env" ]; then
   exit 1
 fi
 
-exec ./.venv/bin/uvicorn main:app --reload
+exec ./.venv/bin/uvicorn main:app --reload --host 0.0.0.0
