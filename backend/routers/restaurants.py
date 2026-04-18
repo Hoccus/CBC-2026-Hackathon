@@ -5,7 +5,7 @@ import re
 import anthropic
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from services.google_places import reverse_geocode_label, search_nearby_restaurants
+from services.google_places import reverse_geocode_label, search_nearby_restaurants_legacy
 
 router = APIRouter()
 
@@ -60,7 +60,7 @@ class NearbyRestaurantResponse(BaseModel):
 
 @router.post("/nearby", response_model=NearbyRestaurantResponse)
 async def nearby_restaurants(req: NearbyRestaurantSearchRequest):
-    places = await search_nearby_restaurants(
+    places = await search_nearby_restaurants_legacy(
         latitude=req.latitude,
         longitude=req.longitude,
         radius_m=req.radius_m,
@@ -96,7 +96,11 @@ async def score_restaurants(req: RestaurantRequest):
     if not req.restaurants:
         raise HTTPException(status_code=400, detail="No restaurants provided.")
 
-    client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not set")
+
+    client = anthropic.Anthropic(api_key=api_key)
 
     items = "\n".join(_format_restaurant_line(r) for r in req.restaurants[:20])
     restrictions = ", ".join(req.dietary_restrictions) or "none"
@@ -128,7 +132,11 @@ Only use restaurant names exactly as they appear in the list above."""
     if not match:
         raise HTTPException(status_code=500, detail="Could not parse restaurant suggestions.")
 
-    data = json.loads(match.group())
+    try:
+        data = json.loads(match.group())
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=502, detail="Unexpected response from AI.")
+
     restaurant_lookup = {restaurant.name: restaurant for restaurant in req.restaurants}
     suggestions = []
     for row in data:

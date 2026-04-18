@@ -2,6 +2,7 @@ import base64
 import json
 import os
 import re
+from typing import Optional
 
 import anthropic
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
@@ -22,12 +23,16 @@ class MacroEstimate(BaseModel):
 @router.post("/analyze", response_model=MacroEstimate)
 async def analyze_meal(
     description: str = Form(""),
-    image: UploadFile | None = File(None),
+    image: Optional[UploadFile] = File(None),
 ):
     if not description and (not image or not image.filename):
         raise HTTPException(status_code=400, detail="Provide a description or image.")
 
-    client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not set")
+
+    client = anthropic.Anthropic(api_key=api_key)
     content: list = []
 
     if image and image.filename:
@@ -62,4 +67,9 @@ async def analyze_meal(
     match = re.search(r"\{.*\}", raw, re.DOTALL)
     if not match:
         raise HTTPException(status_code=500, detail="Could not parse nutrition response.")
-    return MacroEstimate(**json.loads(match.group()))
+    try:
+        data = json.loads(match.group())
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=502, detail="Unexpected response from AI.")
+
+    return MacroEstimate(**data)
