@@ -2,19 +2,41 @@
 
 A parallel iOS/Android app that hits the same FastAPI backend. Built with Expo so demo devices can run it instantly via the **Expo Go** app — no Xcode, no Android Studio, no app store.
 
-The mobile app is feature-equivalent to the web frontend (white/monochrome theme, same data model) and uses native components where they matter: a floating liquid-glass (BlurView) bottom tab bar, Ionicons, and an iOS SegmentedControl on the Track screen.
+The mobile app now matches the web [design prototype at `/prototype`](prototype.md) — dark `#0a0a0a` theme, Barlow Condensed display type, Maya Chen "national correspondent" persona. **Phase 1 (UI port) is done; Phase 2 (wire fake screens to the backend) is partially complete** — see "Backend wiring" below.
 
-> The next visual direction is captured in the [design prototype at `/prototype`](prototype.md) — dark mode, travel-journalist accents, Maya Chen persona. See that doc's "Porting to the mobile app" section for the work list.
+## Screens & navigation
 
-## Screens
+The bottom tab bar shows four tabs plus a centered FAB:
 
-- **Dashboard** — greeting, today's macro progress bars, today's meals, quick actions
-- **Coach** — chat with the AI nutrition coach; context picker (airport, hotel, etc.)
-- **Track** — take/pick a photo + optional description → macros, add to today's log
-- **Restaurants** — geolocates the user, queries Overpass API for nearby places, ranks top picks
-- **Profile** — age/weight/height/activity + dietary restrictions + auto-calculated goals (Mifflin-St Jeor)
+| Tab / route | What it shows |
+|---|---|
+| **Dashboard** (`HomeScreen`) | Travel context banner ("Lunch in 28 min · Centennial Park"), weekly nutrition columns × 4 macros, "Next up today" schedule, sparkline insight cards |
+| **Food Log** (`FoodLogScreen`) | Today's macro totals + logged meal entries with `📸 PHOTO` source tags |
+| **[FAB]** | Opens the **LogSheet** bottom modal (photo / voice / search / quick-add → photo-estimate result) |
+| **Restaurants** (`RestaurantsScreen`) | Real Google Places search + AI scoring (see Backend wiring) |
+| **More** (`MoreScreen`) | Maya Chen profile, travel-nutrition stat grid, settings list |
 
-All backend calls hit the existing endpoints (`/api/track/analyze`, `/api/coach/advice`, `/api/restaurants/score`). Profile and meal log are persisted locally via `AsyncStorage` under the keys `nutricoach_profile` and `nutricoach_log`.
+Two screens live above the tab navigator:
+
+- **Plan** (`PlanScreen`) — pushed onto the stack from Dashboard's "Full day" link or any meal-window tap. Timeline of today's calendar with meal windows expanded into ranked food options.
+- **Coach** (`CoachScreen`) — full-screen modal that slides up. Reachable from the Dashboard travel banner ("Ask coach") and from "MEAL WINDOW" cards.
+
+## Backend wiring
+
+| Screen / feature | Status | Endpoint |
+|---|---|---|
+| Restaurants | ✅ Live | `POST /api/places/nearby`, `POST /api/restaurants/score`, OSM Nominatim geocoding |
+| Coach chat | 🟡 Fake thread | `POST /api/coach/advice` (to wire) |
+| Food Log entries | 🟡 Fake | `GET /api/meals` (to wire) + AsyncStorage |
+| LogSheet → photo estimate | 🟡 Fake | `POST /api/track/analyze` (to wire — old `TrackScreen.tsx` has the working logic) |
+| Dashboard weekly columns | 🟡 Fake | client-side aggregation of `/api/meals` (to wire) |
+| Dashboard travel banner | ❌ No backend | Needs calendar + location + scoring combined |
+| Plan timeline | ❌ No backend | Needs a calendar feed |
+| More travel-nutrition stats | ❌ No backend | New aggregates needed |
+
+Profile and meal log are persisted locally via `AsyncStorage` under `nutricoach_profile` and `nutricoach_log`.
+
+The pre-prototype screens (`TrackScreen.tsx`, `ProfileScreen.tsx`) are still on disk but unrouted — keep them around as reference for Phase 2 wiring patterns.
 
 ---
 
@@ -71,7 +93,7 @@ A QR code will print in the terminal. On the phone:
 - **iPhone:** open the Camera app, point it at the QR code, tap the notification
 - **Android:** open Expo Go → "Scan QR code"
 
-The app loads live on the phone. Edits to source files hot-reload instantly.
+The app loads live on the phone. Edits to source files hot-reload instantly. The first launch will take ~30s while @expo-google-fonts download Barlow Condensed / Space Grotesk / Inter.
 
 ---
 
@@ -81,10 +103,12 @@ The app loads live on the phone. Edits to source files hot-reload instantly.
 |---|---|
 | "Network request failed" on phone | Phone and laptop not on same WiFi, or `EXPO_PUBLIC_API_URL` still points to `localhost` |
 | Backend unreachable | Ensure backend is started with `--host 0.0.0.0` (the run script does this) |
-| Camera/library permission denied | Tap **Allow** when prompted; on iOS you may need to toggle it in Settings → Expo Go |
-| Location permission denied | Restaurants screen needs location — grant in Settings → Expo Go → Location |
-| Tab bar labels cut off by home indicator | Each screen pads content by `useBottomTabBarHeight()`; if a new screen is added, do the same |
+| Restaurants screen returns `GOOGLE_PLACES_API_KEY` error | Set `GOOGLE_PLACES_API_KEY` in `backend/.env` and restart |
+| Camera/library permission denied | Tap **Allow** when prompted; on iOS toggle in Settings → Expo Go |
+| Location permission denied | Restaurants needs location — Settings → Expo Go → Location |
+| App stuck on a black screen with a spinner | Fonts haven't downloaded yet on first launch — give it ~30s |
 | Public WiFi blocks LAN | Use a phone hotspot, or `npx expo start --tunnel` (install `@expo/ngrok` first) |
+| Port 8081 in use | `npx expo start --port 8082` |
 
 ---
 
@@ -92,27 +116,37 @@ The app loads live on the phone. Edits to source files hot-reload instantly.
 
 ```
 mobile/
-  App.tsx                     # Bottom-tab navigator + BlurView liquid-glass tab bar
+  App.tsx                          # Stack { MainTabs, Plan, Coach (modal) } + font loader
   src/
-    config.ts                 # API_BASE from EXPO_PUBLIC_API_URL
-    theme.ts                  # colors, radius, typography (mirrors web CSS vars)
-    navigation.ts             # RootTabParamList
-    storage.ts                # AsyncStorage helpers (profile + meal log)
-    types.ts                  # Profile, MealEntry, MacroResult, ScoredRestaurant
+    config.ts                      # API_BASE from EXPO_PUBLIC_API_URL
+    theme.ts                       # Dark palette, MACRO colors, FONTS map
+    data.ts                        # Fake Maya Chen data (mirrors web prototype)
+    navigation.ts                  # RootStackParamList + RootTabParamList
+    storage.ts                     # AsyncStorage helpers (profile + meal log)
+    types.ts                       # Profile, MealEntry, MacroResult, ScoredRestaurant
+    components/
+      atoms.tsx                    # Display, DisplayNum, ScoreBadge, Column, MacroBar, ICONS
+      CustomTabBar.tsx             # Search input + 4 tabs + centered FAB
+      LogSheet.tsx                 # Bottom sheet from FAB (menu → photo estimate)
     screens/
-      HomeScreen.tsx          # Dashboard
-      CoachScreen.tsx         # Chat + context picker
-      TrackScreen.tsx         # Photo/text → macros (SegmentedControl)
-      RestaurantsScreen.tsx   # Geolocation → Overpass → ranked picks
-      ProfileScreen.tsx       # BMR/TDEE + restrictions + goals
+      HomeScreen.tsx               # Dashboard
+      FoodLogScreen.tsx            # Food log
+      RestaurantsScreen.tsx        # Google Places + scoring (real backend)
+      MoreScreen.tsx               # Profile + travel stats + settings
+      PlanScreen.tsx               # Stack-pushed timeline
+      CoachScreen.tsx              # Full-screen modal chat
+      TrackScreen.tsx              # ⚠️ unrouted — kept for Phase 2 photo wiring
+      ProfileScreen.tsx            # ⚠️ unrouted — kept for Phase 2 profile/goal wiring
 ```
 
-## Native components in use
+## Native libraries in use
 
-- `expo-blur` — `BlurView` with `tint="systemChromeMaterialLight"` for the floating tab bar
-- `@expo/vector-icons` — Ionicons for tab icons (filled when active, outline when inactive)
-- `@react-native-segmented-control/segmented-control` — iOS segmented control on Track
+- `@expo-google-fonts/barlow-condensed`, `@expo-google-fonts/space-grotesk`, `@expo-google-fonts/inter` + `expo-font` — display + body type
+- `expo-linear-gradient` — Dashboard travel banner, More avatar, LogSheet photo gradient
+- `react-native-svg` — Dashboard insight sparklines
+- `expo-blur` — kept available; the dark theme uses solid surfaces instead of BlurView for now
+- `@expo/vector-icons` — Ionicons mapped via `ICONS` in `components/atoms.tsx`
+- `@react-navigation/native-stack` + `@react-navigation/bottom-tabs` — Plan/Coach as stack screens, custom dark tab bar
 - `react-native-safe-area-context` — `SafeAreaView` with `edges={['top']}` on every screen
-- `@react-navigation/bottom-tabs` — `useBottomTabBarHeight` for content padding under the floating bar
-- `expo-image-picker` — camera + library access for Track
-- `expo-location` — foreground permission + coordinates for Restaurants
+- `expo-image-picker` — camera + library access (still wired in unrouted `TrackScreen.tsx`)
+- `expo-location` + `@react-native-community/slider` — `RestaurantsScreen` GPS + radius
