@@ -17,3 +17,6 @@ mobile/.env
 .DS_Store
 
 backend/.env.example
+
+# SQLite databases
+*.db
