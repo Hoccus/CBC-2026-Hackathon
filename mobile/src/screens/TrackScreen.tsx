@@ -1,69 +1,78 @@
 import React, { useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  TextInput, Image, ActivityIndicator, Alert, SafeAreaView,
+  View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput,
+  Image, ActivityIndicator, Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import SegmentedControl from '@react-native-segmented-control/segmented-control';
 import { API_BASE } from '../config';
-import { colors } from '../theme';
+import { colors, radius, type as T } from '../theme';
+import { addMeal } from '../storage';
+import { MacroResult } from '../types';
 
-type Macro = {
-  calories: number;
-  protein_g: number;
-  carbs_g: number;
-  fat_g: number;
-  description: string;
-  health_notes: string;
-};
+type Tab = 'photo' | 'text';
+
+function MacroCard({ label, value, unit }: { label: string; value: number; unit: string }) {
+  return (
+    <View style={styles.macroCard}>
+      <Text style={styles.macroVal}>{Math.round(value)}</Text>
+      <Text style={styles.macroUnit}>{unit}</Text>
+      <Text style={styles.macroLabel}>{label}</Text>
+    </View>
+  );
+}
 
 export default function TrackScreen() {
+  const tabBarHeight = useBottomTabBarHeight();
+  const [tab, setTab] = useState<Tab>('photo');
   const [imageUri, setImageUri] = useState<string | null>(null);
-  const [mime, setMime] = useState<string>('image/jpeg');
+  const [mime, setMime] = useState('image/jpeg');
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<Macro | null>(null);
+  const [result, setResult] = useState<MacroResult | null>(null);
+  const [added, setAdded] = useState(false);
 
-  async function pickFromLibrary() {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  async function pick(source: 'camera' | 'library') {
+    const perm =
+      source === 'camera'
+        ? await ImagePicker.requestCameraPermissionsAsync()
+        : await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
-      Alert.alert('Permission needed', 'Photo library access is required.');
+      Alert.alert('Permission needed', 'Allow access to continue.');
       return;
     }
-    const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.7,
-    });
+    const res =
+      source === 'camera'
+        ? await ImagePicker.launchCameraAsync({ quality: 0.7 })
+        : await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ['images'],
+            quality: 0.7,
+          });
     if (!res.canceled && res.assets[0]) {
       setImageUri(res.assets[0].uri);
       setMime(res.assets[0].mimeType ?? 'image/jpeg');
       setResult(null);
-    }
-  }
-
-  async function takePhoto() {
-    const perm = await ImagePicker.requestCameraPermissionsAsync();
-    if (!perm.granted) {
-      Alert.alert('Permission needed', 'Camera access is required.');
-      return;
-    }
-    const res = await ImagePicker.launchCameraAsync({ quality: 0.7 });
-    if (!res.canceled && res.assets[0]) {
-      setImageUri(res.assets[0].uri);
-      setMime(res.assets[0].mimeType ?? 'image/jpeg');
-      setResult(null);
+      setAdded(false);
     }
   }
 
   async function analyze() {
-    if (!imageUri && !description.trim()) {
-      Alert.alert('Missing input', 'Add a photo or description first.');
+    if (loading) return;
+    if (tab === 'photo' && !imageUri) {
+      Alert.alert('No photo', 'Take or choose a photo first.');
+      return;
+    }
+    if (tab === 'text' && !description.trim()) {
+      Alert.alert('No description', 'Describe your meal first.');
       return;
     }
     setLoading(true);
     setResult(null);
     try {
       const form = new FormData();
-      if (imageUri) {
+      if (imageUri && tab === 'photo') {
         const ext = mime.split('/')[1] ?? 'jpg';
         form.append('image', {
           uri: imageUri,
@@ -73,143 +82,202 @@ export default function TrackScreen() {
       }
       if (description.trim()) form.append('description', description.trim());
 
-      const res = await fetch(`${API_BASE}/api/track/analyze`, {
-        method: 'POST',
-        body: form,
-      });
-      if (!res.ok) {
-        const txt = await res.text();
-        throw new Error(txt || `HTTP ${res.status}`);
-      }
-      const data: Macro = await res.json();
-      setResult(data);
+      const res = await fetch(`${API_BASE}/api/track/analyze`, { method: 'POST', body: form });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setResult((await res.json()) as MacroResult);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      Alert.alert('Analysis failed', message);
+      Alert.alert('Failed to analyze', message);
     } finally {
       setLoading(false);
     }
+  }
+
+  async function addToLog() {
+    if (!result) return;
+    await addMeal({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      timestamp: Date.now(),
+      description: result.description,
+      calories: result.calories,
+      protein_g: result.protein_g,
+      carbs_g: result.carbs_g,
+      fat_g: result.fat_g,
+    });
+    setAdded(true);
   }
 
   function reset() {
     setImageUri(null);
     setDescription('');
     setResult(null);
+    setAdded(false);
   }
 
+  const canAnalyze =
+    (tab === 'photo' && !!imageUri) || (tab === 'text' && description.trim().length > 0);
+
   return (
-    <SafeAreaView style={styles.safe}>
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <Text style={styles.title}>Track a Meal</Text>
-        <Text style={styles.subtitle}>Snap or pick a photo. Add details if you want.</Text>
+    <SafeAreaView style={styles.safe} edges={['top']}>
+      <ScrollView
+        contentContainerStyle={[styles.page, { paddingBottom: tabBarHeight + 24 }]}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={{ marginBottom: 24 }}>
+          <Text style={T.h1}>Track a Meal</Text>
+          <Text style={[T.muted, { marginTop: 4 }]}>
+            Upload a photo or describe your meal for an instant macro estimate.
+          </Text>
+        </View>
 
-        {imageUri ? (
-          <View style={styles.previewWrap}>
-            <Image source={{ uri: imageUri }} style={styles.preview} resizeMode="cover" />
-            <TouchableOpacity style={styles.previewClear} onPress={() => setImageUri(null)}>
-              <Text style={{ color: colors.text }}>Clear</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View style={styles.photoRow}>
-            <TouchableOpacity style={styles.ghostBtn} onPress={takePhoto}>
-              <Text style={styles.ghostBtnText}>Take Photo</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.ghostBtn} onPress={pickFromLibrary}>
-              <Text style={styles.ghostBtnText}>Choose Photo</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+        {!result ? (
+          <>
+            <SegmentedControl
+              values={['Upload Photo', 'Describe Meal']}
+              selectedIndex={tab === 'photo' ? 0 : 1}
+              onChange={(e) => setTab(e.nativeEvent.selectedSegmentIndex === 0 ? 'photo' : 'text')}
+              style={{ marginBottom: 16 }}
+            />
 
-        <TextInput
-          value={description}
-          onChangeText={setDescription}
-          placeholder="Optional: describe the meal or portion"
-          placeholderTextColor={colors.muted}
-          style={styles.input}
-          multiline
-        />
+            {tab === 'photo' && (
+              <View style={styles.uploadZone}>
+                {imageUri ? (
+                  <Image source={{ uri: imageUri }} style={styles.preview} resizeMode="cover" />
+                ) : (
+                  <>
+                    <Text style={[T.body, { fontWeight: '500', textAlign: 'center' }]}>
+                      Take or choose a photo
+                    </Text>
+                    <Text style={[T.small, { textAlign: 'center', marginTop: 4 }]}>
+                      JPG, PNG, WEBP
+                    </Text>
+                  </>
+                )}
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 16 }}>
+                  <TouchableOpacity
+                    style={[styles.btn, styles.btnSecondary, { flex: 1 }]}
+                    onPress={() => pick('camera')}
+                  >
+                    <Text style={styles.btnSecondaryText}>
+                      {imageUri ? 'Retake' : 'Take Photo'}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.btn, styles.btnSecondary, { flex: 1 }]}
+                    onPress={() => pick('library')}
+                  >
+                    <Text style={styles.btnSecondaryText}>
+                      {imageUri ? 'Choose Different' : 'Choose Photo'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
 
-        <TouchableOpacity
-          style={[styles.primaryBtn, loading && { opacity: 0.6 }]}
-          onPress={analyze}
-          disabled={loading}
-        >
-          {loading ? (
-            <ActivityIndicator color={colors.accentText} />
-          ) : (
-            <Text style={styles.primaryBtnText}>Analyze</Text>
-          )}
-        </TouchableOpacity>
-
-        {result && (
-          <View style={styles.resultCard}>
-            <Text style={styles.resultTitle}>{result.description}</Text>
-            <View style={styles.macroGrid}>
-              <Macro label="Calories" value={`${Math.round(result.calories)}`} />
-              <Macro label="Protein" value={`${Math.round(result.protein_g)}g`} />
-              <Macro label="Carbs" value={`${Math.round(result.carbs_g)}g`} />
-              <Macro label="Fat" value={`${Math.round(result.fat_g)}g`} />
+            <View style={{ marginBottom: 16 }}>
+              <Text style={styles.labelText}>
+                {tab === 'photo' ? 'Description (optional)' : 'Describe your meal'}
+              </Text>
+              <TextInput
+                style={styles.textarea}
+                placeholder={
+                  tab === 'photo'
+                    ? 'e.g. chicken stir-fry with rice'
+                    : 'e.g. grilled salmon, roasted broccoli, half cup quinoa'
+                }
+                placeholderTextColor={colors.light}
+                multiline
+                value={description}
+                onChangeText={setDescription}
+              />
             </View>
-            <Text style={styles.resultNotes}>{result.health_notes}</Text>
-            <TouchableOpacity style={styles.resetBtn} onPress={reset}>
-              <Text style={styles.resetBtnText}>Track another</Text>
+
+            <TouchableOpacity
+              style={[styles.btn, styles.btnPrimary, (!canAnalyze || loading) && { opacity: 0.35 }]}
+              onPress={analyze}
+              disabled={!canAnalyze || loading}
+            >
+              {loading ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <ActivityIndicator color="#fff" />
+                  <Text style={styles.btnPrimaryText}>Analyzing...</Text>
+                </View>
+              ) : (
+                <Text style={styles.btnPrimaryText}>Analyze Meal</Text>
+              )}
             </TouchableOpacity>
-          </View>
+          </>
+        ) : (
+          <>
+            <View style={[styles.card, { backgroundColor: colors.surfaceAlt, marginBottom: 16 }]}>
+              <Text style={[T.body, { fontWeight: '600' }]}>{result.description}</Text>
+              <Text style={[T.muted, { marginTop: 8, lineHeight: 20 }]}>{result.health_notes}</Text>
+            </View>
+
+            <View style={styles.macroGrid}>
+              <MacroCard label="Calories" value={result.calories} unit="kcal" />
+              <MacroCard label="Protein" value={result.protein_g} unit="g" />
+              <MacroCard label="Carbs" value={result.carbs_g} unit="g" />
+              <MacroCard label="Fat" value={result.fat_g} unit="g" />
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 24 }}>
+              <TouchableOpacity
+                style={[styles.btn, styles.btnPrimary, { flex: 1 }, added && { opacity: 0.6 }]}
+                onPress={addToLog}
+                disabled={added}
+              >
+                <Text style={styles.btnPrimaryText}>
+                  {added ? 'Added to Log' : "Add to Today's Log"}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.btn, styles.btnSecondary]} onPress={reset}>
+                <Text style={styles.btnSecondaryText}>Analyze Another</Text>
+              </TouchableOpacity>
+            </View>
+          </>
         )}
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-function Macro({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.macro}>
-      <Text style={styles.macroValue}>{value}</Text>
-      <Text style={styles.macroLabel}>{label}</Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
-  container: { padding: 20, paddingBottom: 60 },
-  title: { color: colors.text, fontSize: 26, fontWeight: '700', marginTop: 8 },
-  subtitle: { color: colors.muted, fontSize: 14, marginTop: 4, marginBottom: 20 },
-  photoRow: { flexDirection: 'row', gap: 12, marginBottom: 16 },
-  ghostBtn: {
-    flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 12,
-    paddingVertical: 14, alignItems: 'center', backgroundColor: colors.card,
+  page: { padding: 20, paddingBottom: 80 },
+  card: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius,
+    padding: 16,
   },
-  ghostBtnText: { color: colors.text, fontWeight: '600' },
-  previewWrap: { position: 'relative', marginBottom: 16 },
-  preview: { width: '100%', height: 260, borderRadius: 12, backgroundColor: colors.card },
-  previewClear: {
-    position: 'absolute', top: 10, right: 10,
-    backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8,
+  uploadZone: {
+    borderWidth: 1, borderStyle: 'dashed', borderColor: '#d4d4d4',
+    borderRadius: radius, padding: 20, backgroundColor: colors.surfaceAlt,
+    marginBottom: 16, alignItems: 'center',
   },
-  input: {
-    backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
-    borderRadius: 12, padding: 14, color: colors.text, minHeight: 70, marginBottom: 16,
-    fontSize: 15, textAlignVertical: 'top',
+  preview: { width: '100%', height: 220, borderRadius: 4 },
+  labelText: { fontSize: 12, fontWeight: '500', color: colors.muted, marginBottom: 6 },
+  textarea: {
+    backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border,
+    borderRadius: radius, padding: 11, color: colors.text, minHeight: 80,
+    fontSize: 13, textAlignVertical: 'top', lineHeight: 20,
   },
-  primaryBtn: {
-    backgroundColor: colors.accent, paddingVertical: 16, borderRadius: 12, alignItems: 'center',
+  btn: {
+    paddingHorizontal: 14, paddingVertical: 11, borderRadius: radius,
+    alignItems: 'center', justifyContent: 'center',
   },
-  primaryBtnText: { color: colors.accentText, fontSize: 16, fontWeight: '700' },
-  resultCard: {
-    marginTop: 24, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
-    borderRadius: 16, padding: 18,
+  btnPrimary: { backgroundColor: colors.text },
+  btnPrimaryText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  btnSecondary: { backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border },
+  btnSecondaryText: { color: colors.text, fontSize: 13, fontWeight: '500' },
+  macroGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  macroCard: {
+    flexBasis: '47%', flexGrow: 1, backgroundColor: colors.surface,
+    borderWidth: 1, borderColor: colors.border, borderRadius: radius, padding: 14,
   },
-  resultTitle: { color: colors.text, fontSize: 18, fontWeight: '600', marginBottom: 14 },
-  macroGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 14 },
-  macro: {
-    flexGrow: 1, flexBasis: '45%', backgroundColor: colors.bg, borderRadius: 10, padding: 12,
-    borderWidth: 1, borderColor: colors.border,
-  },
-  macroValue: { color: colors.accent, fontSize: 22, fontWeight: '700' },
-  macroLabel: { color: colors.muted, fontSize: 12, marginTop: 2, textTransform: 'uppercase' },
-  resultNotes: { color: colors.muted, fontSize: 14, lineHeight: 20 },
-  resetBtn: { marginTop: 16, alignSelf: 'flex-start' },
-  resetBtnText: { color: colors.accent, fontWeight: '600' },
+  macroVal: { fontSize: 24, fontWeight: '700', letterSpacing: -1, color: colors.text },
+  macroUnit: { fontSize: 11, fontWeight: '600', color: colors.light, letterSpacing: 0.6, marginTop: 2 },
+  macroLabel: { fontSize: 12, color: colors.light, marginTop: 4 },
 });
