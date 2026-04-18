@@ -5,7 +5,10 @@ import json
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from typing import Optional
 import anthropic
-from models.nutrition import MealLog, MealLogResponse, MacroEstimate
+try:
+    from ..models.nutrition import MealLog, MealLogResponse, MacroEstimate  # type: ignore
+except ImportError:
+    from models.nutrition import MealLog, MealLogResponse, MacroEstimate  # type: ignore
 
 router = APIRouter()
 

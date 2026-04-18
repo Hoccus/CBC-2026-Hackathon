@@ -31,10 +31,10 @@ export default function OnboardingForm({ onSubmit }: OnboardingFormProps) {
     onSubmit(formData)
   }
 
-  const travelIntensityOptions = [
-    { label: 'Low (Mostly Sedentary)', value: 1.2, description: 'Office work, minimal walking' },
-    { label: 'Moderate (Active Travel)', value: 1.375, description: 'Regular walking, exploring cities' },
-    { label: 'High (Very Active)', value: 1.55, description: 'Hiking, sports, constant movement' }
+  const activityLevelOptions = [
+    { label: 'Low (Mostly sedentary)', value: 1.2, description: 'Mostly sitting, minimal daily walking' },
+    { label: 'Moderate (Lightly active)', value: 1.375, description: 'Regular walking, standing, errands' },
+    { label: 'High (Very active)', value: 1.55, description: 'Hard training, sports, physically demanding days' }
   ]
 
   return (
@@ -42,7 +42,7 @@ export default function OnboardingForm({ onSubmit }: OnboardingFormProps) {
       <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-2xl w-full">
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold text-gray-800 mb-2">Macro Tracker</h1>
-          <p className="text-gray-600">Set up your nutrition profile for travel</p>
+          <p className="text-gray-600">Set up your nutrition profile for your real life</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -117,15 +117,15 @@ export default function OnboardingForm({ onSubmit }: OnboardingFormProps) {
             </div>
           </div>
 
-          {/* Travel Intensity Section */}
+          {/* Activity Level Section */}
           <div className="bg-green-50 rounded-lg p-6">
             <div className="flex items-center gap-2 mb-4">
               <Activity className="text-green-600" size={24} />
-              <h2 className="text-xl font-semibold text-gray-800">Travel Intensity</h2>
+              <h2 className="text-xl font-semibold text-gray-800">Activity Level</h2>
             </div>
 
             <div className="space-y-3">
-              {travelIntensityOptions.map((option) => (
+              {activityLevelOptions.map((option) => (
                 <label
                   key={option.value}
                   className={`flex items-start p-4 border-2 rounded-lg cursor-pointer transition-all ${

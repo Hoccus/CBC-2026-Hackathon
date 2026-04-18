@@ -10,6 +10,7 @@ from routers.profile import _get_profile
 router = APIRouter()
 
 
+
 @router.post("/advice", response_model=CoachResponse)
 async def get_advice(req: CoachRequest):
     profile = _get_profile()

@@ -8,11 +8,15 @@ interface Profile { name: string; restrictions: string[]; goals: { calories: num
 const CONTEXTS = [
   { value: "", label: "Select situation..." },
   { value: "at home — have access to a full kitchen", label: "At home" },
+  { value: "at school or work — limited time and limited options", label: "School / work" },
+  { value: "on campus dining hall or cafeteria", label: "Campus dining hall" },
   { value: "at the airport", label: "Airport" },
   { value: "on the road — gas stations and fast food only", label: "On the road" },
   { value: "at a hotel — maybe a minibar and room service", label: "Hotel" },
   { value: "at a restaurant — can order anything", label: "Restaurant" },
   { value: "at a convenience store", label: "Convenience store" },
+  { value: "grocery shopping — choosing items for the next few meals", label: "Grocery store" },
+  { value: "older adult — prioritizing energy, protein, and easy prep", label: "Older adult / easy prep" },
 ];
 
 export default function CoachPage() {
@@ -81,7 +85,8 @@ export default function CoachPage() {
             <p style={{ fontWeight: 600, fontSize: 13 }}>Ask your nutrition coach</p>
             <p className="text-muted mt-1" style={{ fontSize: 12 }}>
               &ldquo;What should I eat at the airport?&rdquo;<br />
-              &ldquo;I have eggs, spinach, and cheese — what can I make?&rdquo;
+              &ldquo;I have eggs, spinach, and cheese — what can I make?&rdquo;<br />
+              &ldquo;I’m a student on a budget—what’s a good cafeteria plate?&rdquo;
             </p>
           </div>
         )}
@@ -101,7 +106,7 @@ export default function CoachPage() {
 
       <form onSubmit={send} className="flex gap-2">
         <input className="input" value={input} onChange={(e) => setInput(e.target.value)}
-          placeholder="What's in your fridge? What's on the menu?" />
+          placeholder="What options do you have (fridge/menu/cafeteria)? Any goals or restrictions?" />
         <button className="btn btn-primary" type="submit" disabled={loading || !input.trim()}>Send</button>
       </form>
     </main>
