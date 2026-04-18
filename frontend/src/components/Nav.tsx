@@ -13,6 +13,7 @@ const links = [
 
 export default function Nav() {
   const pathname = usePathname();
+  if (pathname?.startsWith("/prototype")) return null;
   return (
     <nav className="nav">
       <Link href="/" className="nav-logo">NutriCoach</Link>
