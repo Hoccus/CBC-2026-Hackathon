@@ -19,9 +19,13 @@ async def get_advice(req: CoachRequest):
 
     client = anthropic.Anthropic(api_key=api_key)
 
-    user_message = req.message
+    parts = []
+    if req.profile_context:
+        parts.append(f"[User Profile: {req.profile_context}]")
     if req.context:
-        user_message = f"[Context: {req.context}]\n{req.message}"
+        parts.append(f"[Situation: {req.context}]")
+    parts.append(req.message)
+    user_message = "\n".join(parts)
 
     message = client.messages.create(
         model="claude-sonnet-4-6",
@@ -30,6 +34,4 @@ async def get_advice(req: CoachRequest):
         messages=[{"role": "user", "content": user_message}],
     )
 
-    advice_text = message.content[0].text
-
-    return CoachResponse(advice=advice_text, suggestions=[])
+    return CoachResponse(advice=message.content[0].text, suggestions=[])

@@ -5,6 +5,7 @@ from typing import Optional
 class CoachRequest(BaseModel):
     message: str
     context: Optional[str] = None
+    profile_context: Optional[str] = None
 
 
 class CoachResponse(BaseModel):
