@@ -19,9 +19,7 @@ export const createAuth = (ctx: GenericCtx<DataModel>) => {
       google: {
         clientId: process.env.GOOGLE_CLIENT_ID!,
         clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-        accessType: "offline",
-        prompt: "consent select_account",
-        scope: ["https://www.googleapis.com/auth/calendar.readonly"],
+        prompt: "select_account",
       },
       microsoft: {
         clientId: process.env.MICROSOFT_CLIENT_ID!,
@@ -29,7 +27,6 @@ export const createAuth = (ctx: GenericCtx<DataModel>) => {
         tenantId: "common",
         authority: "https://login.microsoftonline.com",
         prompt: "select_account",
-        scope: ["Calendars.Read", "offline_access"],
       },
     },
     plugins: [

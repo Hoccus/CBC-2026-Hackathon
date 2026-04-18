@@ -3,6 +3,7 @@
 import { Authenticated, AuthLoading, Unauthenticated } from "convex/react";
 import { ReactNode } from "react";
 import AuthForm from "./AuthForm";
+import ProfileBootstrap from "./ProfileBootstrap";
 
 export default function AuthGate({ children }: { children: ReactNode }) {
   return (
@@ -15,7 +16,10 @@ export default function AuthGate({ children }: { children: ReactNode }) {
       <Unauthenticated>
         <AuthForm />
       </Unauthenticated>
-      <Authenticated>{children}</Authenticated>
+      <Authenticated>
+        <ProfileBootstrap />
+        {children}
+      </Authenticated>
     </>
   );
 }

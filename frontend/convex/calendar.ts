@@ -6,7 +6,10 @@ const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.readonly
 const MICROSOFT_CALENDAR_SCOPE = "Calendars.Read";
 
 function hasScope(scopeString: string | null | undefined, requiredScope: string) {
-  return (scopeString || "").split(" ").includes(requiredScope);
+  return (scopeString || "")
+    .split(/[,\s]+/)
+    .filter(Boolean)
+    .includes(requiredScope);
 }
 
 async function getAccounts(ctx: any, userId: string) {

@@ -1,7 +1,6 @@
 "use client";
 
 import { api } from "@convex/_generated/api";
-import { authClient } from "@/lib/auth-client";
 import { DEFAULT_PROFILE, Profile } from "@/lib/persistence";
 import { useMutation, useQuery } from "convex/react";
 import { useEffect, useMemo, useState } from "react";
@@ -22,6 +21,11 @@ const ACTIVITY = [
 type CalBrand = "google" | "outlook";
 type CalState = "idle" | "syncing" | "connected";
 type CalRisk = "low" | "med" | "high";
+
+const CALENDAR_SCOPES: Record<CalBrand, string[]> = {
+  google: ["https://www.googleapis.com/auth/calendar.readonly"],
+  outlook: ["Calendars.Read", "offline_access"],
+};
 
 interface CalEvent {
   id: string;
@@ -134,16 +138,37 @@ export default function ProfilePage() {
   async function connectCalendar(brand: CalBrand) {
     const setter = brand === "google" ? setGoogleSyncing : setOutlookSyncing;
     setter(true);
-    const provider = brand === "google" ? "google" : "microsoft";
-
     try {
-      const result = await authClient.signIn.social({
-        provider,
-        callbackURL: `/profile?calendar_connected=${brand}`,
+      const provider = brand === "google" ? "google" : "microsoft";
+      const response = await fetch("/api/auth/link-social", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          provider,
+          callbackURL: `/profile?calendar_connected=${brand}`,
+          scopes: CALENDAR_SCOPES[brand],
+          disableRedirect: true,
+        }),
       });
-      if (result.error) {
-        throw new Error(result.error.message);
+
+      if (!response.ok) {
+        throw new Error("Unable to start calendar connection.");
       }
+
+      const payload = (await response.json()) as {
+        url?: string;
+        error?: { message?: string };
+      };
+
+      if (payload.error?.message) {
+        throw new Error(payload.error.message);
+      }
+      if (!payload.url) {
+        throw new Error("Calendar connection URL was not returned.");
+      }
+      window.location.href = payload.url;
     } catch (error) {
       setCalendarMessage(
         error instanceof Error ? error.message : "Unable to start calendar connection.",
@@ -228,7 +253,7 @@ export default function ProfilePage() {
         </div>
         <p className="text-muted mb-4" style={{ fontSize: 13 }}>
           Import your week so the coach times meals around flights, hits, and
-          briefings. Calendar access now follows the same Google or Microsoft sign-in you use for the app.
+          briefings. Sign in to the app first, then connect Google Calendar or Outlook only when you want schedule access.
         </p>
         {calendarMessage && (
           <p className="text-muted mb-4" style={{ fontSize: 13, color: "var(--text)" }}>
