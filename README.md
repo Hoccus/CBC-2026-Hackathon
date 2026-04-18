@@ -7,6 +7,7 @@ A real-time nutrition coaching tool for a national correspondent who travels con
 - **Backend:** FastAPI (Python 3.9+) — [backend/](backend/)
 - **Web frontend:** Next.js 15 App Router — [frontend/](frontend/)
 - **Mobile:** React Native / Expo — [mobile/](mobile/)
+- **Design prototype:** iOS-framed hi-fi mockup at [/prototype](frontend/src/app/prototype/page.tsx) (dark mode, travel-journalist persona, fake data) — see [docs/prototype.md](docs/prototype.md)
 - **AI:** Anthropic Claude (`claude-sonnet-4-6`) via the `anthropic` Python SDK
 
 ## Quick start
@@ -30,6 +31,7 @@ See [docs/mobile-app.md](docs/mobile-app.md) for the full Expo Go demo setup.
 
 ## Docs
 
+- [Design prototype (`/prototype`)](docs/prototype.md)
 - [Mobile app (Expo / React Native)](docs/mobile-app.md)
 - [Photo macro tracking API](docs/photo-macro-tracking.md)
 - Interactive API docs: http://localhost:8000/docs when the backend is running

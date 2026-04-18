@@ -4,6 +4,8 @@ A parallel iOS/Android app that hits the same FastAPI backend. Built with Expo s
 
 The mobile app is feature-equivalent to the web frontend (white/monochrome theme, same data model) and uses native components where they matter: a floating liquid-glass (BlurView) bottom tab bar, Ionicons, and an iOS SegmentedControl on the Track screen.
 
+> The next visual direction is captured in the [design prototype at `/prototype`](prototype.md) — dark mode, travel-journalist accents, Maya Chen persona. See that doc's "Porting to the mobile app" section for the work list.
+
 ## Screens
 
 - **Dashboard** — greeting, today's macro progress bars, today's meals, quick actions

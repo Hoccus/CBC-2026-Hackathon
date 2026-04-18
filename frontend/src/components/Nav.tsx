@@ -20,6 +20,8 @@ export default function Nav() {
   const { isAuthenticated, isLoading } = useConvexAuth();
   const [signingOut, setSigningOut] = useState(false);
 
+  if (pathname?.startsWith("/prototype")) return null;
+
   async function handleSignOut() {
     if (signingOut) {
       return;
