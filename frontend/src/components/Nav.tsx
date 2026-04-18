@@ -20,7 +20,7 @@ export default function Nav() {
   const { isAuthenticated, isLoading } = useConvexAuth();
   const [signingOut, setSigningOut] = useState(false);
 
-  if (pathname?.startsWith("/prototype")) return null;
+  if (pathname?.startsWith("/prototype") || pathname?.startsWith("/mobile-auth")) return null;
 
   async function handleSignOut() {
     if (signingOut) {

@@ -1,12 +1,13 @@
-import React, { useCallback, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Modal, Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useMutation, useQuery } from 'convex/react';
+import { useMobileAuth } from '../auth';
+import { api } from '../convexApi';
 import { colors, radius, type as T } from '../theme';
-import { getProfile, saveProfile } from '../storage';
 import { DEFAULT_PROFILE, Profile } from '../types';
 
 const RESTRICTIONS = [
@@ -49,15 +50,15 @@ export default function ProfileScreen() {
   const [profile, setProfile] = useState<Profile>(DEFAULT_PROFILE);
   const [saved, setSaved] = useState(false);
   const [picker, setPicker] = useState<'gender' | 'activity' | null>(null);
+  const storedProfile = useQuery(api.profiles.getMine);
+  const upsertProfile = useMutation(api.profiles.upsertMine);
+  const { signOut } = useMobileAuth();
 
-  useFocusEffect(
-    useCallback(() => {
-      (async () => {
-        const p = await getProfile();
-        if (p) setProfile(p);
-      })();
-    }, [])
-  );
+  useEffect(() => {
+    if (storedProfile) {
+      setProfile(storedProfile);
+    }
+  }, [storedProfile]);
 
   function update<K extends keyof Profile>(key: K, value: Profile[K]) {
     setProfile((p) => ({ ...p, [key]: value }));
@@ -81,7 +82,7 @@ export default function ProfileScreen() {
   }
 
   async function onSave() {
-    await saveProfile(profile);
+    await upsertProfile(profile);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }
@@ -224,6 +225,9 @@ export default function ProfileScreen() {
 
         <TouchableOpacity style={[styles.btn, styles.btnPrimary]} onPress={onSave}>
           <Text style={styles.btnPrimaryText}>{saved ? '✓ Saved!' : 'Save Profile'}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.btn, styles.btnSecondary, { marginTop: 10 }]} onPress={() => void signOut()}>
+          <Text style={styles.btnSecondaryText}>Sign Out</Text>
         </TouchableOpacity>
       </ScrollView>
 

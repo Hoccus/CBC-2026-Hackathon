@@ -7,9 +7,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import SegmentedControl from '@react-native-segmented-control/segmented-control';
+import { useMutation } from 'convex/react';
 import { API_BASE } from '../config';
 import { colors, radius, type as T } from '../theme';
-import { addMeal } from '../storage';
+import { api } from '../convexApi';
 import { MacroResult } from '../types';
 
 type Tab = 'photo' | 'text';
@@ -33,6 +34,7 @@ export default function TrackScreen() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<MacroResult | null>(null);
   const [added, setAdded] = useState(false);
+  const addAnalyzedMeal = useMutation(api.meals.addAnalyzed);
 
   async function pick(source: 'camera' | 'library') {
     const perm =
@@ -95,14 +97,13 @@ export default function TrackScreen() {
 
   async function addToLog() {
     if (!result) return;
-    await addMeal({
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      timestamp: Date.now(),
+    await addAnalyzedMeal({
       description: result.description,
       calories: result.calories,
       protein_g: result.protein_g,
       carbs_g: result.carbs_g,
       fat_g: result.fat_g,
+      notes: result.health_notes,
     });
     setAdded(true);
   }

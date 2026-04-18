@@ -1,13 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { authClient } from "@/lib/auth-client";
 
-export default function AuthForm() {
+export default function AuthForm({
+  callbackURL = "/",
+  autoProvider,
+}: {
+  callbackURL?: string;
+  autoProvider?: "google" | "microsoft";
+}) {
   const [submitting, setSubmitting] = useState<"google" | "microsoft" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const autoStarted = useRef(false);
 
-  async function handleSocialSignIn(provider: "google" | "microsoft") {
+  const handleSocialSignIn = useCallback(async (provider: "google" | "microsoft") => {
     if (submitting) {
       return;
     }
@@ -18,7 +25,7 @@ export default function AuthForm() {
     try {
       const { error } = await authClient.signIn.social({
         provider,
-        callbackURL: "/",
+        callbackURL,
       });
       if (error) {
         throw new Error(error.message);
@@ -28,7 +35,16 @@ export default function AuthForm() {
     } finally {
       setSubmitting(null);
     }
-  }
+  }, [callbackURL, submitting]);
+
+  useEffect(() => {
+    if (!autoProvider || autoStarted.current) {
+      return;
+    }
+
+    autoStarted.current = true;
+    void handleSocialSignIn(autoProvider);
+  }, [autoProvider, handleSocialSignIn]);
 
   return (
     <main className="page" style={{ display: "grid", placeItems: "center", minHeight: "calc(100vh - var(--nav-h))" }}>

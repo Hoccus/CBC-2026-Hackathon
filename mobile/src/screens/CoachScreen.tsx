@@ -1,20 +1,14 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView,
   KeyboardAvoidingView, Platform, ActivityIndicator, Modal, Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useMutation, useQuery } from 'convex/react';
 import { API_BASE } from '../config';
 import { colors, radius, type as T } from '../theme';
-import { getProfile } from '../storage';
-import { Profile } from '../types';
-
-interface Message {
-  role: 'user' | 'assistant';
-  content: string;
-}
+import { api } from '../convexApi';
 
 const CONTEXTS = [
   { value: '', label: 'Select situation...' },
@@ -28,27 +22,22 @@ const CONTEXTS = [
 
 export default function CoachScreen() {
   const tabBarHeight = useBottomTabBarHeight();
-  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [context, setContext] = useState('');
   const [loading, setLoading] = useState(false);
-  const [profile, setProfile] = useState<Profile | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
-
-  useFocusEffect(
-    useCallback(() => {
-      (async () => setProfile(await getProfile()))();
-    }, [])
-  );
+  const profile = useQuery(api.profiles.getMine) ?? null;
+  const messages = useQuery(api.coach.listMine) ?? [];
+  const addMessage = useMutation(api.coach.addMessage);
 
   async function send() {
     const text = input.trim();
     if (!text || loading) return;
-    setMessages((prev) => [...prev, { role: 'user', content: text }]);
     setInput('');
     setLoading(true);
     try {
+      await addMessage({ role: 'user', content: text, context: context || undefined });
       const profileCtx = profile
         ? `${profile.restrictions.length ? 'Restrictions: ' + profile.restrictions.join(', ') + '. ' : ''}Goal: ${profile.goals.calories} kcal, ${profile.goals.protein}g protein.`
         : '';
@@ -63,12 +52,17 @@ export default function CoachScreen() {
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      setMessages((prev) => [...prev, { role: 'assistant', content: data.advice ?? '' }]);
+      await addMessage({
+        role: 'assistant',
+        content: data.advice ?? '',
+        context: context || undefined,
+      });
     } catch {
-      setMessages((prev) => [
-        ...prev,
-        { role: 'assistant', content: 'Something went wrong. Please try again.' },
-      ]);
+      await addMessage({
+        role: 'assistant',
+        content: 'Something went wrong. Please try again.',
+        context: context || undefined,
+      });
     } finally {
       setLoading(false);
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50);
@@ -116,9 +110,9 @@ export default function CoachScreen() {
               </Text>
             </View>
           )}
-          {messages.map((m, i) => (
+          {messages.map((m: { id: string; role: 'user' | 'assistant'; content: string }, i: number) => (
             <View
-              key={i}
+              key={m.id ?? i}
               style={[styles.bubble, m.role === 'user' ? styles.user : styles.assistant]}
             >
               <Text

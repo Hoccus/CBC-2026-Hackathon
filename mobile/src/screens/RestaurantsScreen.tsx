@@ -1,15 +1,15 @@
-import React, { useCallback, useState } from 'react';
+import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
-import { useFocusEffect } from '@react-navigation/native';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useQuery } from 'convex/react';
 import { API_BASE } from '../config';
 import { colors, radius, type as T } from '../theme';
-import { getProfile } from '../storage';
-import { Profile, ScoredRestaurant } from '../types';
+import { api } from '../convexApi';
+import { ScoredRestaurant } from '../types';
 
 interface OsmElement {
   tags?: { name?: string; cuisine?: string; amenity?: string };
@@ -38,14 +38,8 @@ export default function RestaurantsScreen() {
   const [status, setStatus] = useState<Status>('idle');
   const [results, setResults] = useState<ScoredRestaurant[]>([]);
   const [errorMsg, setErrorMsg] = useState('');
-  const [profile, setProfile] = useState<Profile | null>(null);
   const [locationName, setLocationName] = useState('');
-
-  useFocusEffect(
-    useCallback(() => {
-      (async () => setProfile(await getProfile()))();
-    }, [])
-  );
+  const profile = useQuery(api.profiles.getMine) ?? null;
 
   async function findRestaurants() {
     setStatus('locating');
@@ -144,7 +138,7 @@ export default function RestaurantsScreen() {
 
         {profile?.restrictions?.length ? (
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
-            {profile.restrictions.map((r) => (
+            {profile.restrictions.map((r: string) => (
               <View key={r} style={styles.badgeGreen}>
                 <Text style={styles.badgeGreenText}>{r}</Text>
               </View>
@@ -196,7 +190,7 @@ export default function RestaurantsScreen() {
               </TouchableOpacity>
             </View>
             <View style={{ gap: 10 }}>
-              {results.map((r, i) => (
+              {results.map((r: ScoredRestaurant, i) => (
                 <View key={`${r.name}-${i}`} style={[styles.card, styles.restaurantItem]}>
                   <ScoreCircle score={r.health_score} />
                   <View style={{ flex: 1 }}>

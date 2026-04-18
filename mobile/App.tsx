@@ -14,6 +14,7 @@ import RestaurantsScreen from './src/screens/RestaurantsScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import { RootTabParamList } from './src/navigation';
 import { colors } from './src/theme';
+import { MobileAuthRoot } from './src/auth';
 
 const Tab = createBottomTabNavigator<RootTabParamList>();
 
@@ -56,38 +57,40 @@ function TabBarBackground() {
 
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <NavigationContainer theme={theme}>
-        <StatusBar style="dark" />
-        <Tab.Navigator
-          screenOptions={({ route }) => ({
-            headerShown: false,
-            tabBarActiveTintColor: colors.text,
-            tabBarInactiveTintColor: colors.light,
-            tabBarLabelStyle: { fontSize: 10, fontWeight: '500', marginTop: 2 },
-            tabBarIconStyle: { marginTop: 2 },
-            tabBarStyle: styles.tabBar,
-            tabBarBackground: () => <TabBarBackground />,
-            tabBarIcon: ({ focused, color, size }) => {
-              const names = ICONS[route.name];
-              return (
-                <Ionicons
-                  name={focused ? names.active : names.inactive}
-                  size={size - 2}
-                  color={color}
-                />
-              );
-            },
-          })}
-        >
-          <Tab.Screen name="Dashboard"   component={HomeScreen} />
-          <Tab.Screen name="Coach"       component={CoachScreen} />
-          <Tab.Screen name="Track"       component={TrackScreen} />
-          <Tab.Screen name="Restaurants" component={RestaurantsScreen} />
-          <Tab.Screen name="Profile"     component={ProfileScreen} />
-        </Tab.Navigator>
-      </NavigationContainer>
-    </SafeAreaProvider>
+    <MobileAuthRoot>
+      <SafeAreaProvider>
+        <NavigationContainer theme={theme}>
+          <StatusBar style="dark" />
+          <Tab.Navigator
+            screenOptions={({ route }) => ({
+              headerShown: false,
+              tabBarActiveTintColor: colors.text,
+              tabBarInactiveTintColor: colors.light,
+              tabBarLabelStyle: { fontSize: 10, fontWeight: '500', marginTop: 2 },
+              tabBarIconStyle: { marginTop: 2 },
+              tabBarStyle: styles.tabBar,
+              tabBarBackground: () => <TabBarBackground />,
+              tabBarIcon: ({ focused, color, size }) => {
+                const names = ICONS[route.name];
+                return (
+                  <Ionicons
+                    name={focused ? names.active : names.inactive}
+                    size={size - 2}
+                    color={color}
+                  />
+                );
+              },
+            })}
+          >
+            <Tab.Screen name="Dashboard"   component={HomeScreen} />
+            <Tab.Screen name="Coach"       component={CoachScreen} />
+            <Tab.Screen name="Track"       component={TrackScreen} />
+            <Tab.Screen name="Restaurants" component={RestaurantsScreen} />
+            <Tab.Screen name="Profile"     component={ProfileScreen} />
+          </Tab.Navigator>
+        </NavigationContainer>
+      </SafeAreaProvider>
+    </MobileAuthRoot>
   );
 }
 

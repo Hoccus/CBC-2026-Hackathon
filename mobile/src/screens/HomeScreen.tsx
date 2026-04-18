@@ -1,12 +1,13 @@
-import React, { useCallback, useState } from 'react';
+import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { BottomTabNavigationProp, useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useQuery } from 'convex/react';
 import { colors, type, radius } from '../theme';
 import { RootTabParamList } from '../navigation';
-import { getLog, getProfile, todaysMeals } from '../storage';
-import { DEFAULT_GOALS, MealEntry, Profile } from '../types';
+import { api } from '../convexApi';
+import { DEFAULT_GOALS } from '../types';
 
 type Nav = BottomTabNavigationProp<RootTabParamList>;
 
@@ -44,26 +45,19 @@ function MacroBar({ label, current, goal }: { label: string; current: number; go
 export default function HomeScreen() {
   const navigation = useNavigation<Nav>();
   const tabBarHeight = useBottomTabBarHeight();
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [meals, setMeals] = useState<MealEntry[]>([]);
-
-  useFocusEffect(
-    useCallback(() => {
-      (async () => {
-        setProfile(await getProfile());
-        const log = await getLog();
-        setMeals(todaysMeals(log));
-      })();
-    }, [])
-  );
+  const profile = useQuery(api.profiles.getMine) ?? null;
+  const meals = useQuery(api.meals.listMine) ?? [];
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const todayMeals = meals.filter((meal: { loggedAt: number }) => meal.loggedAt >= startOfToday.getTime());
 
   const goals = profile?.goals ?? DEFAULT_GOALS;
-  const totals = meals.reduce(
-    (acc, m) => ({
-      calories: acc.calories + m.calories,
-      protein: acc.protein + m.protein_g,
-      carbs: acc.carbs + m.carbs_g,
-      fat: acc.fat + m.fat_g,
+  const totals = todayMeals.reduce(
+    (acc: { calories: number; protein: number; carbs: number; fat: number }, m: { calories?: number; protein_g?: number; carbs_g?: number; fat_g?: number }) => ({
+      calories: acc.calories + (m.calories ?? 0),
+      protein: acc.protein + (m.protein_g ?? 0),
+      carbs: acc.carbs + (m.carbs_g ?? 0),
+      fat: acc.fat + (m.fat_g ?? 0),
     }),
     { calories: 0, protein: 0, carbs: 0, fat: 0 }
   );
@@ -90,7 +84,7 @@ export default function HomeScreen() {
             <Text style={type.h3}>Today&apos;s Progress</Text>
             <View style={styles.badge}>
               <Text style={styles.badgeText}>
-                {meals.length} meal{meals.length !== 1 ? 's' : ''}
+                {todayMeals.length} meal{todayMeals.length !== 1 ? 's' : ''}
               </Text>
             </View>
           </View>
@@ -124,7 +118,7 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {meals.length === 0 ? (
+        {todayMeals.length === 0 ? (
           <View style={[styles.card, styles.empty]}>
             <Text style={[type.body, { color: colors.light }]}>No meals logged yet.</Text>
             <Text style={[type.small, { color: colors.light, marginTop: 4 }]}>
@@ -133,17 +127,17 @@ export default function HomeScreen() {
           </View>
         ) : (
           <View style={{ gap: 10 }}>
-            {[...meals].reverse().map((m) => (
+            {todayMeals.map((m: { id: string; description: string; calories?: number; protein_g?: number; carbs_g?: number; fat_g?: number; loggedAt: number }) => (
               <View key={m.id} style={[styles.card, styles.mealRow]}>
                 <View style={{ flex: 1 }}>
                   <Text style={[type.body, { fontWeight: '500' }]}>{m.description}</Text>
                   <Text style={[type.small, { marginTop: 3 }]}>
-                    {Math.round(m.calories)} kcal · {Math.round(m.protein_g)}g P ·{' '}
-                    {Math.round(m.carbs_g)}g C · {Math.round(m.fat_g)}g F
+                    {Math.round(m.calories ?? 0)} kcal · {Math.round(m.protein_g ?? 0)}g P ·{' '}
+                    {Math.round(m.carbs_g ?? 0)}g C · {Math.round(m.fat_g ?? 0)}g F
                   </Text>
                 </View>
                 <Text style={[type.small, { color: colors.light }]}>
-                  {new Date(m.timestamp).toLocaleTimeString([], {
+                  {new Date(m.loggedAt).toLocaleTimeString([], {
                     hour: '2-digit',
                     minute: '2-digit',
                   })}

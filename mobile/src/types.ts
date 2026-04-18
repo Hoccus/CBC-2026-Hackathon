@@ -7,11 +7,12 @@ export interface Profile {
   activity: 'sedentary' | 'light' | 'moderate' | 'active' | 'extra';
   restrictions: string[];
   goals: { calories: number; protein: number; carbs: number; fat: number };
+  calendarConnections: { google: boolean; outlook: boolean };
 }
 
 export interface MealEntry {
   id: string;
-  timestamp: number;
+  loggedAt: number;
   description: string;
   calories: number;
   protein_g: number;
@@ -44,6 +45,7 @@ export const DEFAULT_PROFILE: Profile = {
   activity: 'moderate',
   restrictions: [],
   goals: { calories: 2000, protein: 120, carbs: 200, fat: 67 },
+  calendarConnections: { google: false, outlook: false },
 };
 
 export const DEFAULT_GOALS = DEFAULT_PROFILE.goals;

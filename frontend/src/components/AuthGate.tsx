@@ -1,10 +1,17 @@
 "use client";
 
 import { Authenticated, AuthLoading, Unauthenticated } from "convex/react";
+import { usePathname } from "next/navigation";
 import { ReactNode } from "react";
 import AuthForm from "./AuthForm";
 
 export default function AuthGate({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
+
+  if (pathname?.startsWith("/mobile-auth")) {
+    return <>{children}</>;
+  }
+
   return (
     <>
       <AuthLoading>

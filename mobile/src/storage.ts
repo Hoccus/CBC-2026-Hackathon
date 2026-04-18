@@ -35,7 +35,7 @@ export async function addMeal(meal: MealEntry): Promise<void> {
 export function todaysMeals(log: MealEntry[]): MealEntry[] {
   const start = new Date();
   start.setHours(0, 0, 0, 0);
-  return log.filter((m) => m.timestamp >= start.getTime());
+  return log.filter((m) => m.loggedAt >= start.getTime());
 }
 
 export { DEFAULT_PROFILE };
