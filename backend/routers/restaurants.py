@@ -5,6 +5,7 @@ import re
 import anthropic
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+from services.google_places import reverse_geocode_label, search_nearby_restaurants
 
 router = APIRouter()
 
@@ -13,6 +14,8 @@ class Restaurant(BaseModel):
     name: str
     cuisine: str = ""
     amenity: str = "restaurant"
+    address: str | None = None
+    maps_url: str | None = None
 
 
 class RestaurantRequest(BaseModel):
@@ -27,10 +30,65 @@ class ScoredRestaurant(BaseModel):
     health_score: int
     suggested_order: str
     reasoning: str
+    address: str | None = None
+    maps_url: str | None = None
 
 
 class RestaurantResponse(BaseModel):
     suggestions: list[ScoredRestaurant]
+
+
+class NearbyRestaurantSearchRequest(BaseModel):
+    latitude: float
+    longitude: float
+    radius_m: float = 1200
+    max_results: int = 15
+
+
+class NearbyRestaurantResult(BaseModel):
+    name: str
+    cuisine: str = ""
+    amenity: str = "restaurant"
+    address: str | None = None
+    maps_url: str | None = None
+
+
+class NearbyRestaurantResponse(BaseModel):
+    location_name: str | None = None
+    restaurants: list[NearbyRestaurantResult]
+
+
+@router.post("/nearby", response_model=NearbyRestaurantResponse)
+async def nearby_restaurants(req: NearbyRestaurantSearchRequest):
+    places = await search_nearby_restaurants(
+        latitude=req.latitude,
+        longitude=req.longitude,
+        radius_m=req.radius_m,
+        max_results=req.max_results,
+    )
+    location_name = await reverse_geocode_label(req.latitude, req.longitude)
+
+    restaurants: list[NearbyRestaurantResult] = []
+    seen: set[str] = set()
+    for place in places:
+        display_name = ((place.get("displayName") or {}).get("text") or "").strip()
+        if not display_name or display_name in seen:
+            continue
+        seen.add(display_name)
+        types = place.get("types") or []
+        primary_type = place.get("primaryType") or "restaurant"
+        cuisine = _infer_cuisine(types)
+        restaurants.append(
+            NearbyRestaurantResult(
+                name=display_name,
+                cuisine=cuisine,
+                amenity=primary_type,
+                address=place.get("formattedAddress"),
+                maps_url=place.get("googleMapsUri"),
+            )
+        )
+
+    return NearbyRestaurantResponse(location_name=location_name, restaurants=restaurants)
 
 
 @router.post("/score", response_model=RestaurantResponse)
@@ -40,9 +98,7 @@ async def score_restaurants(req: RestaurantRequest):
 
     client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
-    items = "\n".join(
-        f"- {r.name} ({r.cuisine or r.amenity})" for r in req.restaurants[:20]
-    )
+    items = "\n".join(_format_restaurant_line(r) for r in req.restaurants[:20])
     restrictions = ", ".join(req.dietary_restrictions) or "none"
 
     prompt = f"""You are a nutrition coach helping someone find the healthiest food nearby.
@@ -73,4 +129,28 @@ Only use restaurant names exactly as they appear in the list above."""
         raise HTTPException(status_code=500, detail="Could not parse restaurant suggestions.")
 
     data = json.loads(match.group())
-    return RestaurantResponse(suggestions=[ScoredRestaurant(**r) for r in data])
+    restaurant_lookup = {restaurant.name: restaurant for restaurant in req.restaurants}
+    suggestions = []
+    for row in data:
+        original = restaurant_lookup.get(row["name"])
+        suggestions.append(
+            ScoredRestaurant(
+                **row,
+                address=original.address if original else None,
+                maps_url=original.maps_url if original else None,
+            )
+        )
+    return RestaurantResponse(suggestions=suggestions)
+
+
+def _format_restaurant_line(restaurant: Restaurant) -> str:
+    details = restaurant.cuisine or restaurant.amenity
+    address = f" - {restaurant.address}" if restaurant.address else ""
+    return f"- {restaurant.name} ({details}){address}"
+
+
+def _infer_cuisine(types: list[str]) -> str:
+    for place_type in types:
+        if place_type.endswith("_restaurant"):
+            return place_type.replace("_restaurant", "").replace("_", " ")
+    return ""

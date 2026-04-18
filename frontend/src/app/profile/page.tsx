@@ -1,6 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { api } from "@convex/_generated/api";
+import { authClient } from "@/lib/auth-client";
+import { DEFAULT_PROFILE, Profile } from "@/lib/persistence";
+import { useMutation, useQuery } from "convex/react";
+import { useEffect, useMemo, useState } from "react";
 
 const RESTRICTIONS = [
   "Vegetarian", "Vegan", "Gluten-free", "Dairy-free",
@@ -15,15 +19,55 @@ const ACTIVITY = [
   { value: "extra", label: "Extra active (physical job)", factor: 1.9 },
 ];
 
-interface Profile {
-  name: string;
-  age: number;
-  weight: number;
-  height: number;
-  gender: string;
-  activity: string;
-  restrictions: string[];
-  goals: { calories: number; protein: number; carbs: number; fat: number };
+type CalBrand = "google" | "outlook";
+type CalState = "idle" | "syncing" | "connected";
+type CalRisk = "low" | "med" | "high";
+
+interface CalEvent {
+  id: string;
+  dayKey: string;
+  dayLabel: string;
+  time: string;
+  duration: string;
+  title: string;
+  location: string;
+  source: CalBrand;
+  risk: CalRisk;
+  hint: string;
+}
+
+interface CalendarConnection {
+  provider: CalBrand;
+  state: "idle" | "connected";
+  title: string;
+  account_email?: string | null;
+}
+
+interface ApiCalendarEvent {
+  id: string;
+  provider: CalBrand;
+  title: string;
+  location?: string | null;
+  starts_at: string;
+  ends_at: string;
+  timezone?: string | null;
+  is_all_day: boolean;
+}
+
+const EMPTY_CONNECTIONS: Record<CalBrand, CalendarConnection> = {
+  google: { provider: "google", state: "idle", title: "Google Calendar", account_email: null },
+  outlook: { provider: "outlook", state: "idle", title: "Outlook", account_email: null },
+};
+
+function groupEvents(events: CalEvent[]) {
+  const map = new Map<string, { key: string; label: string; items: CalEvent[] }>();
+  for (const e of events) {
+    if (!map.has(e.dayKey)) map.set(e.dayKey, { key: e.dayKey, label: e.dayLabel, items: [] });
+    map.get(e.dayKey)!.items.push(e);
+  }
+  return Array.from(map.values())
+    .sort((a, b) => a.key.localeCompare(b.key))
+    .map((g) => ({ ...g, items: g.items.sort((x, y) => x.time.localeCompare(y.time)) }));
 }
 
 function calcTDEE(profile: Profile): { calories: number; protein: number; carbs: number; fat: number } {
@@ -44,19 +88,93 @@ function calcTDEE(profile: Profile): { calories: number; protein: number; carbs:
 }
 
 export default function ProfilePage() {
-  const [profile, setProfile] = useState<Profile>({
-    name: "", age: 0, weight: 0, height: 0,
-    gender: "male", activity: "moderate", restrictions: [],
-    goals: { calories: 2000, protein: 120, carbs: 200, fat: 67 },
-  });
+  const storedProfile = useQuery(api.profiles.getMine);
+  const saveProfile = useMutation(api.profiles.upsertMine);
+  const [profile, setProfile] = useState<Profile>(DEFAULT_PROFILE);
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [googleSyncing, setGoogleSyncing] = useState(false);
+  const [outlookSyncing, setOutlookSyncing] = useState(false);
+  const [connections, setConnections] = useState<Record<CalBrand, CalendarConnection>>(EMPTY_CONNECTIONS);
+  const [calendarGroups, setCalendarGroups] = useState<Array<{ key: string; label: string; items: CalEvent[] }>>([]);
+  const [calendarMessage, setCalendarMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    try {
-      const p = localStorage.getItem("nutricoach_profile");
-      if (p) setProfile(JSON.parse(p));
-    } catch {}
+    if (storedProfile) {
+      setProfile(storedProfile);
+    }
+  }, [storedProfile]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const connected = params.get("calendar_connected");
+    const error = params.get("calendar_error");
+    if (connected === "google" || connected === "outlook") {
+      setCalendarMessage(`${connected === "google" ? "Google Calendar" : "Outlook"} connected.`);
+    } else if (error) {
+      setCalendarMessage(`Calendar connection failed: ${error}`);
+    }
+    if (connected || error) {
+      window.history.replaceState({}, "", "/profile");
+    }
+    void refreshCalendar();
   }, []);
+
+  const googleState: CalState = googleSyncing
+    ? "syncing"
+    : connections.google.state === "connected"
+      ? "connected"
+      : "idle";
+  const outlookState: CalState = outlookSyncing
+    ? "syncing"
+    : connections.outlook.state === "connected"
+      ? "connected"
+      : "idle";
+
+  async function connectCalendar(brand: CalBrand) {
+    const setter = brand === "google" ? setGoogleSyncing : setOutlookSyncing;
+    setter(true);
+    const provider = brand === "google" ? "google" : "microsoft";
+
+    try {
+      const result = await authClient.signIn.social({
+        provider,
+        callbackURL: `/profile?calendar_connected=${brand}`,
+      });
+      if (result.error) {
+        throw new Error(result.error.message);
+      }
+    } catch (error) {
+      setCalendarMessage(
+        error instanceof Error ? error.message : "Unable to start calendar connection.",
+      );
+      setter(false);
+    }
+  }
+
+  async function disconnectCalendar(brand: CalBrand) {
+    setCalendarMessage(
+      `${brand === "google" ? "Google Calendar" : "Outlook"} access follows your sign-in. Reconnect with that provider to refresh access or sign out to remove it.`,
+    );
+    if (brand === "google") {
+      setGoogleSyncing(false);
+    } else {
+      setOutlookSyncing(false);
+    }
+  }
+
+  const totalEvents = calendarGroups.reduce((n, g) => n + g.items.length, 0);
+  const highRisk = calendarGroups.reduce(
+    (n, g) => n + g.items.filter((e) => e.risk === "high").length, 0
+  );
+  const googleEventCount = useMemo(
+    () => calendarGroups.flatMap((group) => group.items).filter((event) => event.source === "google").length,
+    [calendarGroups]
+  );
+  const outlookEventCount = useMemo(
+    () => calendarGroups.flatMap((group) => group.items).filter((event) => event.source === "outlook").length,
+    [calendarGroups]
+  );
 
   function update(field: string, value: unknown) {
     setProfile((prev) => ({ ...prev, [field]: value }));
@@ -77,10 +195,15 @@ export default function ProfilePage() {
     setSaved(false);
   }
 
-  function save() {
-    localStorage.setItem("nutricoach_profile", JSON.stringify(profile));
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+  async function save() {
+    setSaving(true);
+    try {
+      await saveProfile(profile);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -88,6 +211,68 @@ export default function ProfilePage() {
       <div className="mb-6">
         <h1 className="h1">Your Profile</h1>
         <p className="text-muted mt-1">Personalizes coach advice and macro goals.</p>
+      </div>
+
+      {/* Calendar Sync */}
+      <div className="card mb-4">
+        <div className="section-header">
+          <h2 className="h3">Calendar Sync</h2>
+          {totalEvents > 0 && (
+            <span className="text-muted" style={{ fontSize: 12 }}>
+              <span style={{ color: "var(--text)", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
+                {totalEvents}
+              </span>{" "}
+              events · {highRisk} flagged
+            </span>
+          )}
+        </div>
+        <p className="text-muted mb-4" style={{ fontSize: 13 }}>
+          Import your week so the coach times meals around flights, hits, and
+          briefings. Calendar access now follows the same Google or Microsoft sign-in you use for the app.
+        </p>
+        {calendarMessage && (
+          <p className="text-muted mb-4" style={{ fontSize: 13, color: "var(--text)" }}>
+            {calendarMessage}
+          </p>
+        )}
+        <div className="cal-sources">
+          <CalendarSource
+            brand="google"
+            title="Google Calendar"
+            account={connections.google.account_email || "Connect your Google account"}
+            eventCount={googleEventCount}
+            state={googleState}
+            onConnect={() => connectCalendar("google")}
+            onDisconnect={() => void disconnectCalendar("google")}
+          />
+          <CalendarSource
+            brand="outlook"
+            title="Outlook · Exchange"
+            account={connections.outlook.account_email || "Connect your Microsoft account"}
+            eventCount={outlookEventCount}
+            state={outlookState}
+            onConnect={() => connectCalendar("outlook")}
+            onDisconnect={() => void disconnectCalendar("outlook")}
+          />
+        </div>
+
+        {totalEvents > 0 && (
+          <div className="cal-events">
+            {calendarGroups.map((group, gi) => (
+              <div className="cal-day" key={group.key}>
+                <div className="cal-day-head">
+                  <span className="cal-day-label">{group.label}</span>
+                  <span className="cal-day-count">
+                    {group.items.length} event{group.items.length === 1 ? "" : "s"}
+                  </span>
+                </div>
+                {group.items.map((evt, i) => (
+                  <EventRow key={evt.id} evt={evt} delay={(gi * 4 + i) * 60} />
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Personal Info */}
@@ -171,9 +356,244 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      <button className="btn btn-primary btn-full" onClick={save}>
-        {saved ? "✓ Saved!" : "Save Profile"}
+      <button className="btn btn-primary btn-full" onClick={save} disabled={saving}>
+        {saving ? "Saving..." : saved ? "✓ Saved!" : "Save Profile"}
       </button>
     </main>
+  );
+
+  async function refreshCalendar() {
+    try {
+      const [connectionsRes, eventsRes] = await Promise.all([
+        fetch("/api/calendar/connections"),
+        fetch("/api/calendar/events?days=7"),
+      ]);
+      if (!connectionsRes.ok || !eventsRes.ok) {
+        throw new Error("Failed to load calendar data");
+      }
+
+      const connectionPayload: { connections: CalendarConnection[] } = await connectionsRes.json();
+      const eventPayload: { events: ApiCalendarEvent[] } = await eventsRes.json();
+
+      const nextConnections = { ...EMPTY_CONNECTIONS };
+      for (const connection of connectionPayload.connections) {
+        nextConnections[connection.provider] = connection;
+      }
+
+      setConnections(nextConnections);
+      setCalendarGroups(groupEvents(eventPayload.events.map(toCalEvent)));
+      setProfile((prev) => ({
+        ...prev,
+        calendarConnections: {
+          google: nextConnections.google.state === "connected",
+          outlook: nextConnections.outlook.state === "connected",
+        },
+      }));
+    } catch {
+      setCalendarMessage("Unable to load calendar status right now.");
+    } finally {
+      setGoogleSyncing(false);
+      setOutlookSyncing(false);
+    }
+  }
+}
+
+function toCalEvent(event: ApiCalendarEvent): CalEvent {
+  const start = parseCalendarDate(event.starts_at, event.is_all_day);
+  const end = parseCalendarDate(event.ends_at, event.is_all_day);
+  const risk = inferRisk(start, event.is_all_day);
+  return {
+    id: event.id,
+    dayKey: formatDayKey(start, event.starts_at),
+    dayLabel: formatDayLabel(start, event.starts_at),
+    time: event.is_all_day ? "All day" : formatTime(start),
+    duration: event.is_all_day ? "Flexible" : formatDuration(start, end),
+    title: event.title,
+    location: event.location || "No location",
+    source: event.provider,
+    risk,
+    hint: buildHint(event, risk),
+  };
+}
+
+function formatDayKey(date: Date, fallback: string) {
+  if (Number.isNaN(date.getTime())) {
+    return fallback.slice(0, 10);
+  }
+  return date.toISOString().slice(0, 10);
+}
+
+function formatDayLabel(date: Date, fallback: string) {
+  if (Number.isNaN(date.getTime())) {
+    return fallback.slice(0, 10);
+  }
+  return date.toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  }).replace(",", " ·");
+}
+
+function formatTime(date: Date) {
+  return date.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
+function parseCalendarDate(value: string, isAllDay: boolean) {
+  if (isAllDay && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [year, month, day] = value.split("-").map(Number);
+    return new Date(year, month - 1, day);
+  }
+  return new Date(value);
+}
+
+function formatDuration(start: Date, end: Date) {
+  const minutes = Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000));
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  if (hours && remainingMinutes) {
+    return `${hours}h ${remainingMinutes}m`;
+  }
+  if (hours) {
+    return `${hours}h`;
+  }
+  return `${remainingMinutes}m`;
+}
+
+function inferRisk(start: Date, isAllDay: boolean): CalRisk {
+  if (isAllDay) {
+    return "low";
+  }
+  const hour = start.getHours();
+  if (hour < 7 || hour >= 21) {
+    return "high";
+  }
+  if (hour < 10 || hour >= 18) {
+    return "med";
+  }
+  return "low";
+}
+
+function buildHint(event: ApiCalendarEvent, risk: CalRisk) {
+  if (event.is_all_day) {
+    return "All-day block. Plan normal meals and avoid drifting into snack grazing.";
+  }
+  if (risk === "high") {
+    return "Tight timing window. Grab protein early so you are not relying on convenience food later.";
+  }
+  if (risk === "med") {
+    return "Moderate schedule pressure. Treat this as a deliberate snack or meal checkpoint.";
+  }
+  return "Regular meal window. Keep it simple and protein-forward.";
+}
+
+function CalendarSource({
+  brand, title, account, eventCount, state, onConnect, onDisconnect,
+}: {
+  brand: CalBrand;
+  title: string;
+  account: string;
+  eventCount: number;
+  state: CalState;
+  onConnect: () => void;
+  onDisconnect: () => void;
+}) {
+  const syncing = state === "syncing";
+  const connected = state === "connected";
+
+  return (
+    <button
+      type="button"
+      className="cal-src"
+      data-state={state}
+      data-brand={brand}
+      onClick={connected ? onDisconnect : onConnect}
+      disabled={syncing}
+      aria-label={
+        connected
+          ? `Disconnect ${title}`
+          : syncing
+          ? `Syncing ${title}`
+          : `Import from ${title}`
+      }
+    >
+      <span className="cal-src-glyph">
+        <BrandGlyph brand={brand} />
+      </span>
+      <span className="cal-src-body">
+        <span className="cal-src-title">
+          {connected ? title : `Import from ${title}`}
+        </span>
+        <span className="cal-src-sub">
+          {syncing
+            ? "Discovering events…"
+            : connected
+            ? `${account} · ${eventCount} events synced`
+            : account}
+        </span>
+      </span>
+      <span className="cal-src-cta">
+        {syncing && <span className="spinner" />}
+        {connected && <span>Connected</span>}
+        {connected && <span aria-hidden>✓</span>}
+        {state === "idle" && <span>Connect</span>}
+        {state === "idle" && <span className="cal-src-arrow" aria-hidden>→</span>}
+      </span>
+      {syncing && <span className="cal-progress" aria-hidden />}
+    </button>
+  );
+}
+
+function BrandGlyph({ brand }: { brand: CalBrand }) {
+  if (brand === "google") {
+    return (
+      <svg viewBox="0 0 32 32" width="32" height="32" aria-hidden>
+        <rect x="1" y="1" width="30" height="30" rx="5" fill="#ffffff" stroke="#e8e8e8" />
+        <rect x="1" y="1" width="30" height="4" rx="5" fill="#ea4335" />
+        <rect x="1" y="27" width="30" height="4" rx="5" fill="#fbbc04" />
+        <rect x="1" y="1" width="4" height="30" rx="5" fill="#4285f4" />
+        <rect x="27" y="1" width="4" height="30" rx="5" fill="#34a853" />
+        <text
+          x="16" y="21" textAnchor="middle"
+          fontFamily="-apple-system, Inter, sans-serif"
+          fontSize="11" fontWeight="700" fill="#111"
+        >18</text>
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 32 32" width="32" height="32" aria-hidden>
+      <rect x="1" y="1" width="30" height="30" rx="5" fill="#0f6cbd" />
+      <path
+        d="M8 11 L16 17 L24 11 L24 22 L8 22 Z"
+        fill="none" stroke="#ffffff" strokeWidth="1.6" strokeLinejoin="round"
+      />
+      <circle cx="16" cy="14.6" r="2.2" fill="#ffffff" opacity="0.18" />
+    </svg>
+  );
+}
+
+function EventRow({ evt, delay }: { evt: CalEvent; delay: number }) {
+  return (
+    <div className="cal-evt" style={{ animationDelay: `${delay}ms` }}>
+      <div className="cal-evt-time">
+        <span className="cal-evt-time-hh">{evt.time}</span>
+        <span className="cal-evt-time-dur">{evt.duration}</span>
+      </div>
+      <div className="cal-evt-main">
+        <div className="cal-evt-title">{evt.title}</div>
+        <div className="cal-evt-loc">{evt.location}</div>
+        <div className="cal-evt-hint">
+          <span className={`cal-evt-hint-dot risk-${evt.risk}`} />
+          <span>{evt.hint}</span>
+        </div>
+      </div>
+      <span className="cal-evt-tag" data-src={evt.source}>
+        {evt.source === "google" ? "gCal" : "Outlook"}
+      </span>
+    </div>
   );
 }

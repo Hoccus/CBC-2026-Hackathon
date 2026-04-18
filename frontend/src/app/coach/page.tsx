@@ -1,9 +1,9 @@
 "use client";
 
+import { api } from "@convex/_generated/api";
+import { buildProfileContext, CoachMessage, Profile } from "@/lib/persistence";
+import { useMutation, useQuery } from "convex/react";
 import { useEffect, useRef, useState } from "react";
-
-interface Message { role: "user" | "assistant"; content: string; }
-interface Profile { name: string; restrictions: string[]; goals: { calories: number; protein: number; carbs: number; fat: number }; }
 
 const CONTEXTS = [
   { value: "", label: "Select situation..." },
@@ -15,20 +15,18 @@ const CONTEXTS = [
   { value: "at a convenience store", label: "Convenience store" },
 ];
 
+const EMPTY_MESSAGES: CoachMessage[] = [];
+
 export default function CoachPage() {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const profile = useQuery(api.profiles.getMine) as Profile | null | undefined;
+  const persistedMessages = useQuery(api.coach.listMine) as CoachMessage[] | undefined;
+  const messages = persistedMessages ?? EMPTY_MESSAGES;
+  const addMessage = useMutation(api.coach.addMessage);
+  const clearMessages = useMutation(api.coach.clearMine);
   const [input, setInput] = useState("");
   const [context, setContext] = useState("");
   const [loading, setLoading] = useState(false);
-  const [profile, setProfile] = useState<Profile | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    try {
-      const p = localStorage.getItem("nutricoach_profile");
-      if (p) setProfile(JSON.parse(p));
-    } catch {}
-  }, []);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -37,33 +35,59 @@ export default function CoachPage() {
   async function send(e: React.FormEvent) {
     e.preventDefault();
     if (!input.trim() || loading) return;
-    setMessages((prev) => [...prev, { role: "user", content: input }]);
+    const prompt = input.trim();
     setInput("");
     setLoading(true);
     try {
-      const profileCtx = profile
-        ? `${profile.restrictions.length ? "Restrictions: " + profile.restrictions.join(", ") + ". " : ""}Goal: ${profile.goals.calories} kcal, ${profile.goals.protein}g protein.`
-        : "";
+      const profileCtx = buildProfileContext(profile ?? null);
+      await addMessage({
+        role: "user",
+        content: prompt,
+        context: context || undefined,
+      });
       const res = await fetch("/api/coach/advice", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: input, context: context || undefined, profile_context: profileCtx || undefined }),
+        body: JSON.stringify({
+          message: prompt,
+          context: context || undefined,
+          profile_context: profileCtx || undefined,
+        }),
       });
       if (!res.ok) throw new Error();
       const data = await res.json();
-      setMessages((prev) => [...prev, { role: "assistant", content: data.advice }]);
+      await addMessage({
+        role: "assistant",
+        content: data.advice,
+        context: context || undefined,
+      });
     } catch {
-      setMessages((prev) => [...prev, { role: "assistant", content: "Something went wrong. Please try again." }]);
+      await addMessage({
+        role: "assistant",
+        content: "Something went wrong. Please try again.",
+      });
     } finally {
       setLoading(false);
     }
   }
 
+  async function clearConversation() {
+    if (loading) {
+      return;
+    }
+    await clearMessages({});
+  }
+
   return (
     <main style={{ maxWidth: 700, margin: "0 auto", padding: "28px", height: "calc(100vh - var(--nav-h))", display: "flex", flexDirection: "column" }}>
-      <div className="mb-4">
-        <h1 className="h1">Coach</h1>
-        {profile?.name && <p className="text-muted mt-1">{profile.name} · {profile.goals.calories} kcal goal</p>}
+      <div className="mb-4" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16 }}>
+        <div>
+          <h1 className="h1">Coach</h1>
+          {profile?.name && <p className="text-muted mt-1">{profile.name} · {profile.goals.calories} kcal goal</p>}
+        </div>
+        <button className="btn btn-secondary btn-sm" type="button" onClick={clearConversation} disabled={messages.length === 0 || loading}>
+          Clear Chat
+        </button>
       </div>
 
       <div className="card mb-3" style={{ padding: "10px 14px" }}>
@@ -85,8 +109,8 @@ export default function CoachPage() {
             </p>
           </div>
         )}
-        {messages.map((msg, i) => (
-          <div key={i} className={`chat-bubble chat-bubble-${msg.role === "user" ? "user" : "ai"}`}>
+        {messages.map((msg) => (
+          <div key={msg.id} className={`chat-bubble chat-bubble-${msg.role === "user" ? "user" : "ai"}`}>
             {msg.content}
           </div>
         ))}

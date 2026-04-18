@@ -8,6 +8,7 @@ __pycache__/
 node_modules/
 .next/
 dist/
+.env.local
 
 # Misc
 .DS_Store

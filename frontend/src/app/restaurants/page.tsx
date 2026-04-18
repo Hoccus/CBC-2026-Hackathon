@@ -1,11 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { api } from "@convex/_generated/api";
+import { Profile } from "@/lib/persistence";
+import { useQuery } from "convex/react";
+import { useState } from "react";
 
-interface OsmElement {
-  tags?: { name?: string; cuisine?: string; amenity?: string };
-  lat?: number; lon?: number;
-  center?: { lat: number; lon: number };
+interface NearbyRestaurant {
+  name: string;
+  cuisine: string;
+  amenity: string;
+  address?: string;
+  maps_url?: string;
 }
 
 interface ScoredRestaurant {
@@ -13,11 +18,8 @@ interface ScoredRestaurant {
   health_score: number;
   suggested_order: string;
   reasoning: string;
-}
-
-interface Profile {
-  restrictions: string[];
-  goals: { calories: number };
+  address?: string;
+  maps_url?: string;
 }
 
 function ScoreCircle({ score }: { score: number }) {
@@ -26,18 +28,11 @@ function ScoreCircle({ score }: { score: number }) {
 }
 
 export default function RestaurantsPage() {
+  const profile = useQuery(api.profiles.getMine) as Profile | null | undefined;
   const [status, setStatus] = useState<"idle" | "locating" | "fetching" | "scoring" | "done" | "error">("idle");
   const [results, setResults] = useState<ScoredRestaurant[]>([]);
   const [errorMsg, setErrorMsg] = useState("");
-  const [profile, setProfile] = useState<Profile | null>(null);
   const [locationName, setLocationName] = useState("");
-
-  useEffect(() => {
-    try {
-      const p = localStorage.getItem("nutricoach_profile");
-      if (p) setProfile(JSON.parse(p));
-    } catch {}
-  }, []);
 
   async function findRestaurants() {
     setStatus("locating");
@@ -57,29 +52,30 @@ export default function RestaurantsPage() {
       return;
     }
 
-    // Reverse geocode for display
-    try {
-      const r = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`);
-      const d = await r.json();
-      setLocationName(d.address?.suburb || d.address?.city || d.address?.town || "your area");
-    } catch {}
+    setLocationName("your area");
 
     setStatus("fetching");
 
-    let restaurants: { name: string; cuisine: string; amenity: string }[] = [];
+    let restaurants: NearbyRestaurant[] = [];
     try {
-      const query = `[out:json][timeout:20];(node(around:1200,${lat},${lon})[amenity~"^(restaurant|cafe|fast_food|pub)$"]["name"];way(around:1200,${lat},${lon})[amenity~"^(restaurant|cafe|fast_food|pub)$"]["name"];);out center body qt;`;
-      const r = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`);
-      const data = await r.json();
-      restaurants = (data.elements as OsmElement[])
-        .filter((el) => el.tags?.name)
-        .map((el) => ({
-          name: el.tags!.name!,
-          cuisine: el.tags?.cuisine?.replace(/_/g, " ") ?? "",
-          amenity: el.tags?.amenity ?? "restaurant",
-        }))
-        .filter((r, i, arr) => arr.findIndex((x) => x.name === r.name) === i) // dedupe
-        .slice(0, 20);
+      const res = await fetch("/api/restaurants/nearby", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          latitude: lat,
+          longitude: lon,
+          radius_m: 1200,
+          max_results: 15,
+        }),
+      });
+      if (!res.ok) {
+        throw new Error("Nearby search failed");
+      }
+      const data: { location_name?: string | null; restaurants: NearbyRestaurant[] } = await res.json();
+      restaurants = data.restaurants;
+      if (data.location_name) {
+        setLocationName(data.location_name);
+      }
     } catch {
       setStatus("error");
       setErrorMsg("Could not fetch nearby restaurants. Try again in a moment.");
@@ -88,7 +84,7 @@ export default function RestaurantsPage() {
 
     if (restaurants.length === 0) {
       setStatus("error");
-      setErrorMsg("No named restaurants found within 1.2 km. Try in a more urban area.");
+      setErrorMsg("No nearby restaurants found within 1.2 km.");
       return;
     }
 
@@ -119,7 +115,7 @@ export default function RestaurantsPage() {
     <main className="page">
       <div className="mb-6">
         <h1 className="h1">Nearby Restaurants</h1>
-        <p className="text-muted mt-1">Find the healthiest options within walking distance — scored for your goals.</p>
+        <p className="text-muted mt-1">Find the healthiest options within walking distance and score them for your goals.</p>
       </div>
 
       {profile?.restrictions?.length ? (
@@ -132,7 +128,7 @@ export default function RestaurantsPage() {
         <div className="card text-center" style={{ padding: "48px 24px" }}>
           <p style={{ fontSize: 48, marginBottom: 12 }}>📍</p>
           <h2 className="h2 mb-4">Find what&apos;s nearby</h2>
-          <p className="text-muted mb-6">We&apos;ll use your location to find restaurants within 1.2 km and rank them by how well they match your nutrition goals.</p>
+          <p className="text-muted mb-6">We&apos;ll use your location to pull nearby restaurants within 1.2 km and rank them by how well they match your nutrition goals.</p>
           {status === "error" && (
             <div className="badge badge-red mb-4" style={{ display: "block", padding: "8px 12px", borderRadius: 8, marginBottom: 16 }}>{errorMsg}</div>
           )}
@@ -161,10 +157,18 @@ export default function RestaurantsPage() {
                 <ScoreCircle score={r.health_score} />
                 <div className="restaurant-info">
                   <p style={{ fontWeight: 700, fontSize: 16 }}>{r.name}</p>
+                  {r.address && (
+                    <p className="text-muted mt-1" style={{ fontSize: 13 }}>{r.address}</p>
+                  )}
                   <p style={{ fontSize: 13, color: "var(--primary-dk)", fontWeight: 600, marginTop: 2 }}>
                     Suggested: {r.suggested_order}
                   </p>
                   <p className="text-muted mt-1" style={{ fontSize: 13 }}>{r.reasoning}</p>
+                  {r.maps_url && (
+                    <p className="mt-2" style={{ fontSize: 13 }}>
+                      <a href={r.maps_url} target="_blank" rel="noreferrer">Open in Google Maps</a>
+                    </p>
+                  )}
                 </div>
                 <div style={{ flexShrink: 0 }}>
                   <span className="badge badge-gray">#{i + 1}</span>

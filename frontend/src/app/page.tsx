@@ -1,24 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-
-interface MealEntry {
-  id: string;
-  timestamp: number;
-  description: string;
-  calories: number;
-  protein_g: number;
-  carbs_g: number;
-  fat_g: number;
-}
-
-interface Profile {
-  name: string;
-  goals: { calories: number; protein: number; carbs: number; fat: number };
-}
-
-const DEFAULT_GOALS = { calories: 2000, protein: 120, carbs: 200, fat: 67 };
+import { useQuery } from "convex/react";
+import { api } from "@convex/_generated/api";
+import { DEFAULT_GOALS, startOfToday } from "@/lib/persistence";
 
 function greeting() {
   const h = new Date().getHours();
@@ -46,22 +31,18 @@ function MacroBar({ label, current, goal }: { label: string; current: number; go
 }
 
 export default function Dashboard() {
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [todayMeals, setTodayMeals] = useState<MealEntry[]>([]);
-
-  useEffect(() => {
-    try {
-      const p = localStorage.getItem("nutricoach_profile");
-      if (p) setProfile(JSON.parse(p));
-      const log: MealEntry[] = JSON.parse(localStorage.getItem("nutricoach_log") || "[]");
-      const start = new Date(); start.setHours(0, 0, 0, 0);
-      setTodayMeals(log.filter((m) => m.timestamp >= start.getTime()));
-    } catch {}
-  }, []);
+  const profile = useQuery(api.profiles.getMine);
+  const meals = useQuery(api.meals.listMine) ?? [];
+  const todayMeals = meals.filter((meal) => meal.loggedAt >= startOfToday());
 
   const goals = profile?.goals ?? DEFAULT_GOALS;
   const totals = todayMeals.reduce(
-    (acc, m) => ({ calories: acc.calories + m.calories, protein: acc.protein + m.protein_g, carbs: acc.carbs + m.carbs_g, fat: acc.fat + m.fat_g }),
+    (acc, m) => ({
+      calories: acc.calories + (m.calories ?? 0),
+      protein: acc.protein + (m.protein_g ?? 0),
+      carbs: acc.carbs + (m.carbs_g ?? 0),
+      fat: acc.fat + (m.fat_g ?? 0),
+    }),
     { calories: 0, protein: 0, carbs: 0, fat: 0 }
   );
 
@@ -117,16 +98,16 @@ export default function Dashboard() {
         </div>
       ) : (
         <div className="flex-col gap-3">
-          {[...todayMeals].reverse().map((m) => (
+          {todayMeals.map((m) => (
             <div key={m.id} className="card flex items-center gap-3" style={{ padding: "14px 16px" }}>
               <div style={{ flex: 1 }}>
                 <p style={{ fontWeight: 500, fontSize: 13 }}>{m.description}</p>
                 <p className="text-muted mt-1" style={{ fontSize: 12 }}>
-                  {Math.round(m.calories)} kcal &middot; {Math.round(m.protein_g)}g P &middot; {Math.round(m.carbs_g)}g C &middot; {Math.round(m.fat_g)}g F
+                  {Math.round(m.calories ?? 0)} kcal &middot; {Math.round(m.protein_g ?? 0)}g P &middot; {Math.round(m.carbs_g ?? 0)}g C &middot; {Math.round(m.fat_g ?? 0)}g F
                 </p>
               </div>
               <span style={{ fontSize: 12, color: "var(--light)" }}>
-                {new Date(m.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                {new Date(m.loggedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
               </span>
             </div>
           ))}

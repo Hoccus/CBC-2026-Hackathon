@@ -1,27 +1,17 @@
 "use client";
 
-import { useState, useEffect } from "react";
-
-interface MealEntry {
-  id: string;
-  description: string;
-  location?: string;
-  notes?: string;
-}
+import { api } from "@convex/_generated/api";
+import { MealEntry } from "@/lib/persistence";
+import { useMutation, useQuery } from "convex/react";
+import { useState } from "react";
 
 export default function MealsPage() {
-  const [meals, setMeals] = useState<MealEntry[]>([]);
+  const meals = (useQuery(api.meals.listMine) ?? []) as MealEntry[];
+  const addMeal = useMutation(api.meals.addManual);
   const [description, setDescription] = useState("");
   const [location, setLocation] = useState("");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    fetch("/api/meals/")
-      .then((r) => r.json())
-      .then(setMeals)
-      .catch(() => {});
-  }, []);
 
   async function logMeal(e: React.FormEvent) {
     e.preventDefault();
@@ -29,14 +19,11 @@ export default function MealsPage() {
 
     setSaving(true);
     try {
-      const res = await fetch("/api/meals/log", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ description, location: location || undefined, notes: notes || undefined }),
+      await addMeal({
+        description,
+        location: location || undefined,
+        notes: notes || undefined,
       });
-      if (!res.ok) throw new Error("Failed");
-      const entry: MealEntry = await res.json();
-      setMeals((prev) => [entry, ...prev]);
       setDescription("");
       setLocation("");
       setNotes("");
@@ -120,6 +107,12 @@ export default function MealsPage() {
             )}
             {meal.notes && (
               <p style={{ fontSize: 13, color: "#9ca3af", marginTop: 2 }}>{meal.notes}</p>
+            )}
+            {meal.calories !== undefined && (
+              <p style={{ fontSize: 13, color: "#6b7280", marginTop: 6 }}>
+                {Math.round(meal.calories)} kcal
+                {meal.protein_g !== undefined ? ` · ${Math.round(meal.protein_g)}g protein` : ""}
+              </p>
             )}
           </div>
         ))}
