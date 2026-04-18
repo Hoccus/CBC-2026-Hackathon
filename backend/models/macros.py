@@ -36,6 +36,17 @@ class MacroLogEntry(BaseModel):
     image_base64: Optional[str] = None
 
 
+class MacroLogDirect(BaseModel):
+    description: str
+    calories: float
+    protein_g: float
+    carbs_g: float
+    fat_g: float
+    fiber_g: float = 0
+    health_notes: str = ""
+    meal_type: Optional[str] = None
+
+
 class MacroLogResponse(BaseModel):
     id: str
     timestamp: str

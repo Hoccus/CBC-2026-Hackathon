@@ -120,6 +120,7 @@ function RestaurantDetailModal({
   const [error, setError] = useState("");
   const [photoIndex, setPhotoIndex] = useState(0);
   const [macros, setMacros] = useState<MacroEstimate | null>(null);
+  const [addedToLog, setAddedToLog] = useState(false);
 
   useEffect(() => {
     if (!enriched.place?.place_id) {
@@ -297,6 +298,42 @@ function RestaurantDetailModal({
                     <p className="text-muted mt-3" style={{ fontSize: 11, fontStyle: "italic" }}>
                       Estimated from similar restaurant menu items
                     </p>
+
+                    <button
+                      className={`btn ${addedToLog ? "btn-secondary" : "btn-primary"} btn-full mt-3`}
+                      style={{ fontSize: 13, padding: "8px" }}
+                      disabled={addedToLog}
+                      onClick={async () => {
+                        try {
+                          await fetch("/api/macros/log-direct", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              description: `${enriched.suggested_order} (${enriched.name})`,
+                              calories: macros.calories ?? 0,
+                              protein_g: macros.protein_g ?? 0,
+                              carbs_g: macros.carbs_g ?? 0,
+                              fat_g: macros.fat_g ?? 0,
+                            }),
+                          });
+                          const entry = {
+                            id: crypto.randomUUID(),
+                            timestamp: Date.now(),
+                            description: `${enriched.suggested_order} (${enriched.name})`,
+                            calories: macros.calories ?? 0,
+                            protein_g: macros.protein_g ?? 0,
+                            carbs_g: macros.carbs_g ?? 0,
+                            fat_g: macros.fat_g ?? 0,
+                          };
+                          const log = JSON.parse(localStorage.getItem("nutricoach_log") || "[]");
+                          log.push(entry);
+                          localStorage.setItem("nutricoach_log", JSON.stringify(log));
+                          setAddedToLog(true);
+                        } catch {}
+                      }}
+                    >
+                      {addedToLog ? "Added to Daily Total" : "Add to Daily Macros"}
+                    </button>
                   </div>
                 );
               })() : (

@@ -65,7 +65,7 @@ export default function TrackPage() {
     }
   }
 
-  function addToLog() {
+  async function addToLog() {
     if (!result) return;
     const entry = {
       id: crypto.randomUUID(), timestamp: Date.now(),
@@ -76,12 +76,36 @@ export default function TrackPage() {
     const log = JSON.parse(localStorage.getItem("nutricoach_log") || "[]");
     log.push(entry);
     localStorage.setItem("nutricoach_log", JSON.stringify(log));
+
+    // Also send to backend so /api/macros/today reflects it
+    try {
+      await fetch("/api/macros/log-direct", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          description: result.description,
+          calories: result.calories,
+          protein_g: result.protein_g,
+          carbs_g: result.carbs_g,
+          fat_g: result.fat_g,
+        }),
+      });
+    } catch {}
+
     setAdded(true);
   }
 
   function reset() {
     setImageFile(null); setImagePreview(null);
     setDescription(""); setResult(null); setAdded(false);
+  }
+
+  async function resetDay() {
+    try {
+      await fetch("/api/macros/today", { method: "DELETE" });
+      localStorage.setItem("nutricoach_log", JSON.stringify([]));
+      reset();
+    } catch {}
   }
 
   return (
@@ -164,6 +188,12 @@ export default function TrackPage() {
           </div>
         </div>
       )}
+
+      <div style={{ marginTop: 24, borderTop: "1px solid var(--border)", paddingTop: 16 }}>
+        <button className="btn btn-secondary btn-full" onClick={resetDay}>
+          Reset Day
+        </button>
+      </div>
     </main>
   );
 }

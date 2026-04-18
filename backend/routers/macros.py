@@ -13,6 +13,7 @@ from models.macros import (
     MacroAnalysisRequest,
     MacroAnalysisResponse,
     MacroLogEntry,
+    MacroLogDirect,
     MacroLogResponse,
     DailyMacroSummary,
     NutritionBreakdown,
@@ -93,6 +94,25 @@ async def log_meal(req: MacroLogEntry):
     return entry
 
 
+@router.post("/log-direct", response_model=MacroLogResponse)
+async def log_meal_direct(req: MacroLogDirect):
+    """Log a meal with pre-computed macros (no AI re-analysis)."""
+    entry = MacroLogResponse(
+        id=str(uuid.uuid4()),
+        timestamp=datetime.utcnow().isoformat(),
+        description=req.description,
+        meal_type=req.meal_type,
+        calories=req.calories,
+        protein_g=req.protein_g,
+        carbs_g=req.carbs_g,
+        fat_g=req.fat_g,
+        fiber_g=req.fiber_g,
+        health_notes=req.health_notes,
+    )
+    _log.append(entry)
+    return entry
+
+
 @router.get("/today", response_model=DailyMacroSummary)
 async def get_today_macros():
     """Return today's macro totals and a breakdown by meal, plus progress vs profile targets."""
@@ -157,3 +177,12 @@ async def delete_log_entry(entry_id: str):
     if len(_log) == before:
         raise HTTPException(status_code=404, detail="Entry not found")
     return {"deleted": entry_id}
+
+
+@router.delete("/today")
+async def reset_today():
+    """Clear all of today's logged meals."""
+    global _log
+    today = date.today().isoformat()
+    _log = [e for e in _log if not e.timestamp.startswith(today)]
+    return {"reset": True}
