@@ -2,14 +2,17 @@
 
 A parallel iOS/Android app that hits the same FastAPI backend. Built with Expo so demo devices can run it instantly via the **Expo Go** app — no Xcode, no Android Studio, no app store.
 
+The mobile app is feature-equivalent to the web frontend (white/monochrome theme, same data model) and uses native components where they matter: a floating liquid-glass (BlurView) bottom tab bar, Ionicons, and an iOS SegmentedControl on the Track screen.
+
 ## Screens
 
-- **Home** — tiled navigation
-- **Track** — take/pick a photo + optional description → macros (the killer demo)
-- **Coach** — chat with the AI nutrition coach
-- **Restaurants** — paste a list of nearby places → AI picks the top 5
+- **Dashboard** — greeting, today's macro progress bars, today's meals, quick actions
+- **Coach** — chat with the AI nutrition coach; context picker (airport, hotel, etc.)
+- **Track** — take/pick a photo + optional description → macros, add to today's log
+- **Restaurants** — geolocates the user, queries Overpass API for nearby places, ranks top picks
+- **Profile** — age/weight/height/activity + dietary restrictions + auto-calculated goals (Mifflin-St Jeor)
 
-All three features call the existing backend endpoints (`/api/track/analyze`, `/api/coach/advice`, `/api/restaurants/score`).
+All backend calls hit the existing endpoints (`/api/track/analyze`, `/api/coach/advice`, `/api/restaurants/score`). Profile and meal log are persisted locally via `AsyncStorage` under the keys `nutricoach_profile` and `nutricoach_log`.
 
 ---
 
@@ -77,6 +80,8 @@ The app loads live on the phone. Edits to source files hot-reload instantly.
 | "Network request failed" on phone | Phone and laptop not on same WiFi, or `EXPO_PUBLIC_API_URL` still points to `localhost` |
 | Backend unreachable | Ensure backend is started with `--host 0.0.0.0` (the run script does this) |
 | Camera/library permission denied | Tap **Allow** when prompted; on iOS you may need to toggle it in Settings → Expo Go |
+| Location permission denied | Restaurants screen needs location — grant in Settings → Expo Go → Location |
+| Tab bar labels cut off by home indicator | Each screen pads content by `useBottomTabBarHeight()`; if a new screen is added, do the same |
 | Public WiFi blocks LAN | Use a phone hotspot, or `npx expo start --tunnel` (install `@expo/ngrok` first) |
 
 ---
@@ -85,14 +90,27 @@ The app loads live on the phone. Edits to source files hot-reload instantly.
 
 ```
 mobile/
-  App.tsx                     # NavigationContainer + stack
+  App.tsx                     # Bottom-tab navigator + BlurView liquid-glass tab bar
   src/
     config.ts                 # API_BASE from EXPO_PUBLIC_API_URL
-    theme.ts                  # colors
-    navigation.ts             # RootStackParamList
+    theme.ts                  # colors, radius, typography (mirrors web CSS vars)
+    navigation.ts             # RootTabParamList
+    storage.ts                # AsyncStorage helpers (profile + meal log)
+    types.ts                  # Profile, MealEntry, MacroResult, ScoredRestaurant
     screens/
-      HomeScreen.tsx
-      TrackScreen.tsx         # photo → macros
-      CoachScreen.tsx         # chat
-      RestaurantsScreen.tsx   # ranked picks
+      HomeScreen.tsx          # Dashboard
+      CoachScreen.tsx         # Chat + context picker
+      TrackScreen.tsx         # Photo/text → macros (SegmentedControl)
+      RestaurantsScreen.tsx   # Geolocation → Overpass → ranked picks
+      ProfileScreen.tsx       # BMR/TDEE + restrictions + goals
 ```
+
+## Native components in use
+
+- `expo-blur` — `BlurView` with `tint="systemChromeMaterialLight"` for the floating tab bar
+- `@expo/vector-icons` — Ionicons for tab icons (filled when active, outline when inactive)
+- `@react-native-segmented-control/segmented-control` — iOS segmented control on Track
+- `react-native-safe-area-context` — `SafeAreaView` with `edges={['top']}` on every screen
+- `@react-navigation/bottom-tabs` — `useBottomTabBarHeight` for content padding under the floating bar
+- `expo-image-picker` — camera + library access for Track
+- `expo-location` — foreground permission + coordinates for Restaurants

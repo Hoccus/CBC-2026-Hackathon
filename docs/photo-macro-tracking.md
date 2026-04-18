@@ -98,6 +98,23 @@ curl http://localhost:8000/api/meals/
 
 With the server running, visit [http://localhost:8000/docs](http://localhost:8000/docs) to explore and test all endpoints in the browser.
 
+## Related: `/api/track/analyze`
+
+The web and mobile frontends actually call a sibling endpoint at `POST /api/track/analyze` (see [backend/routers/track.py](../backend/routers/track.py)). Same multipart input, but a simpler response tailored for UI:
+
+```json
+{
+  "calories": 780,
+  "protein_g": 42.0,
+  "carbs_g": 48.0,
+  "fat_g": 45.0,
+  "description": "cheeseburger on brioche",
+  "health_notes": "High in saturated fat; balance with lighter meals today."
+}
+```
+
+Use `/api/meals/analyze` when you want confidence/fiber/estimation-notes fields; use `/api/track/analyze` for the streamlined UI payload.
+
 ## Running the Backend
 
 **Requirements:** Python 3.9+.
