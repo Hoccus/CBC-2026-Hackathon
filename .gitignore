@@ -9,6 +9,10 @@ node_modules/
 .next/
 dist/
 
+# Expo
+.expo/
+mobile/.env
+
 # Misc
 .DS_Store
 
