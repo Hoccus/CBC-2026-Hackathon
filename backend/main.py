@@ -6,9 +6,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 try:
-    from .routers import coach, meals, track, restaurants  # type: ignore
+    from .routers import coach, meals, track, restaurants, profile  # type: ignore
 except ImportError:
-    from routers import coach, meals, track, restaurants  # type: ignore
+    from routers import coach, meals, track, restaurants, profile  # type: ignore
 
 app = FastAPI(title="NutriCoach API", version="0.1.0")
 
@@ -24,6 +24,7 @@ app.include_router(coach.router, prefix="/api/coach", tags=["coach"])
 app.include_router(meals.router, prefix="/api/meals", tags=["meals"])
 app.include_router(track.router, prefix="/api/track", tags=["track"])
 app.include_router(restaurants.router, prefix="/api/restaurants", tags=["restaurants"])
+app.include_router(profile.router, prefix="/api/profile", tags=["profile"])
 
 
 @app.get("/health")
