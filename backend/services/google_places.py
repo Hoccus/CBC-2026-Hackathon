@@ -26,7 +26,8 @@ SEARCH_FIELD_MASK = (
 
 DETAIL_FIELD_MASK = (
     "id,displayName,formattedAddress,rating,priceLevel,"
-    "types,location,nationalPhoneNumber,websiteUri,regularOpeningHours"
+    "types,location,nationalPhoneNumber,websiteUri,"
+    "regularOpeningHours,photos,editorialSummary"
 )
 
 
@@ -77,6 +78,7 @@ def search_nearby_restaurants(
     radius: int = 1500,
     keyword: Optional[str] = None,
     open_now: bool = False,
+    page_token: Optional[str] = None,
 ) -> NearbyPlacesResponse:
     key = _api_key()
     headers = {
@@ -98,6 +100,8 @@ def search_nearby_restaurants(
                 }
             },
         }
+        if page_token:
+            body["pageToken"] = page_token
         resp = requests.post(f"{PLACES_BASE}:searchText", json=body, headers=headers, timeout=10)
     else:
         # Nearby search when no keyword
@@ -111,6 +115,8 @@ def search_nearby_restaurants(
                 }
             },
         }
+        if page_token:
+            body["pageToken"] = page_token
         resp = requests.post(f"{PLACES_BASE}:searchNearby", json=body, headers=headers, timeout=10)
 
     if not resp.ok:
@@ -134,7 +140,9 @@ def search_nearby_restaurants(
         places = [p for p in places if p.open_now is True]
 
     places.sort(key=lambda p: p.distance_meters or 0)
-    return NearbyPlacesResponse(places=places, total=len(places))
+
+    next_page_token = data.get("nextPageToken")
+    return NearbyPlacesResponse(places=places, total=len(places), next_page_token=next_page_token)
 
 
 def get_place_details(place_id: str) -> dict:
@@ -161,4 +169,50 @@ def get_place_details(place_id: str) -> dict:
         "rating": data.get("rating"),
         "phone": data.get("nationalPhoneNumber"),
         "website": data.get("websiteUri"),
+    }
+
+
+def get_place_details_full(place_id: str) -> dict:
+    """Fetch full place details including photos and opening hours."""
+    key = _api_key()
+    headers = {
+        "X-Goog-Api-Key": key,
+        "X-Goog-FieldMask": DETAIL_FIELD_MASK,
+    }
+    resp = requests.get(f"{PLACES_BASE}/{place_id}", headers=headers, timeout=10)
+    resp.raise_for_status()
+    data = resp.json()
+
+    # Build photo URLs (limit to 5)
+    photos = []
+    for photo in data.get("photos", [])[:5]:
+        photo_name = photo.get("name", "")
+        if photo_name:
+            photo_url = (
+                f"https://places.googleapis.com/v1/{photo_name}/media"
+                f"?maxHeightPx=400&maxWidthPx=600&key={key}"
+            )
+            attrs = photo.get("authorAttributions", [])
+            attribution = attrs[0].get("displayName", "") if attrs else ""
+            photos.append({
+                "photo_url": photo_url,
+                "width_px": photo.get("widthPx"),
+                "height_px": photo.get("heightPx"),
+                "attribution": attribution,
+            })
+
+    hours = data.get("regularOpeningHours", {})
+    editorial = data.get("editorialSummary", {})
+
+    return {
+        "place_id": data.get("id", ""),
+        "name": data.get("displayName", {}).get("text", ""),
+        "formatted_address": data.get("formattedAddress", ""),
+        "phone": data.get("nationalPhoneNumber"),
+        "website": data.get("websiteUri"),
+        "rating": data.get("rating"),
+        "price_level": PRICE_LEVEL_MAP.get(data.get("priceLevel", "")),
+        "editorial_summary": editorial.get("text") if isinstance(editorial, dict) else None,
+        "opening_hours_text": hours.get("weekdayDescriptions", []),
+        "photos": photos,
     }

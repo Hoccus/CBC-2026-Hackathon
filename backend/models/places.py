@@ -8,6 +8,7 @@ class NearbyPlacesRequest(BaseModel):
     radius: int = Field(default=1500, gt=0, le=50000, description="Search radius in meters")
     keyword: Optional[str] = Field(default=None, description="e.g. 'healthy food', 'salad', 'sushi'")
     open_now: bool = Field(default=False, description="Filter to only currently open places")
+    page_token: Optional[str] = Field(default=None, description="Token for fetching the next page of results")
 
 
 class PlaceResult(BaseModel):
@@ -28,6 +29,27 @@ class PlaceResult(BaseModel):
 class NearbyPlacesResponse(BaseModel):
     places: List[PlaceResult]
     total: int
+    next_page_token: Optional[str] = None
+
+
+class PlacePhoto(BaseModel):
+    photo_url: str
+    width_px: Optional[int] = None
+    height_px: Optional[int] = None
+    attribution: Optional[str] = None
+
+
+class PlaceDetailsResponse(BaseModel):
+    place_id: str
+    name: str
+    formatted_address: str
+    phone: Optional[str] = None
+    website: Optional[str] = None
+    rating: Optional[float] = None
+    price_level: Optional[int] = None
+    editorial_summary: Optional[str] = None
+    opening_hours_text: List[str] = []
+    photos: List[PlacePhoto] = []
 
 
 class MenuItemNutrition(BaseModel):
@@ -37,6 +59,10 @@ class MenuItemNutrition(BaseModel):
     carbs_g: Optional[float] = None
     fat_g: Optional[float] = None
     fiber_g: Optional[float] = None
+    sugar_g: Optional[float] = None
+    saturated_fat_g: Optional[float] = None
+    sodium_mg: Optional[float] = None
+    cholesterol_mg: Optional[float] = None
     health_score: Optional[float] = None  # 0-100
 
 

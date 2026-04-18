@@ -30,6 +30,7 @@ def search_menu_items(
     params: dict = {
         "query": query,
         "number": limit,
+        "addMenuItemInformation": True,
         "apiKey": api_key,
     }
     if min_calories is not None:
@@ -55,6 +56,10 @@ def search_menu_items(
         carbs = nutrients.get("carbohydrates")
         fat = nutrients.get("fat")
         fiber = nutrients.get("fiber")
+        sugar = nutrients.get("sugar")
+        sat_fat = nutrients.get("saturated fat")
+        sodium = nutrients.get("sodium")
+        cholesterol = nutrients.get("cholesterol")
 
         # Simple health score: protein density + low fat proportion
         health_score = None
@@ -71,6 +76,10 @@ def search_menu_items(
                 carbs_g=carbs,
                 fat_g=fat,
                 fiber_g=fiber,
+                sugar_g=sugar,
+                saturated_fat_g=sat_fat,
+                sodium_mg=sodium,
+                cholesterol_mg=cholesterol,
                 health_score=round(health_score, 1) if health_score is not None else None,
             )
         )

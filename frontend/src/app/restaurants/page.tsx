@@ -22,6 +22,39 @@ interface ScoredRestaurant {
   reasoning: string;
 }
 
+interface PlacePhoto {
+  photo_url: string;
+  width_px?: number;
+  height_px?: number;
+  attribution?: string;
+}
+
+interface PlaceDetails {
+  place_id: string;
+  name: string;
+  formatted_address: string;
+  phone?: string;
+  website?: string;
+  rating?: number;
+  price_level?: number;
+  editorial_summary?: string;
+  opening_hours_text: string[];
+  photos: PlacePhoto[];
+}
+
+interface MacroEstimate {
+  name: string;
+  calories?: number;
+  protein_g?: number;
+  carbs_g?: number;
+  fat_g?: number;
+  fiber_g?: number;
+  sugar_g?: number;
+  saturated_fat_g?: number;
+  sodium_mg?: number;
+  cholesterol_mg?: number;
+}
+
 interface EnrichedResult extends ScoredRestaurant {
   place?: PlaceResult;
 }
@@ -75,6 +108,261 @@ async function geocodeAddress(query: string): Promise<{ lat: number; lon: number
   };
 }
 
+function RestaurantDetailModal({
+  enriched,
+  onClose,
+}: {
+  enriched: EnrichedResult;
+  onClose: () => void;
+}) {
+  const [details, setDetails] = useState<PlaceDetails | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [photoIndex, setPhotoIndex] = useState(0);
+  const [macros, setMacros] = useState<MacroEstimate | null>(null);
+
+  useEffect(() => {
+    if (!enriched.place?.place_id) {
+      setLoading(false);
+      setError("No place ID available");
+      return;
+    }
+    fetch(`/api/places/${enriched.place.place_id}/details`)
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to fetch details");
+        return res.json();
+      })
+      .then(setDetails)
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, [enriched.place?.place_id]);
+
+  useEffect(() => {
+    if (!enriched.suggested_order) return;
+    fetch(`/api/places/menu-item/macros?query=${encodeURIComponent(enriched.suggested_order)}`)
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => { if (data) setMacros(data); })
+      .catch(() => {});
+  }, [enriched.suggested_order]);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handler);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", handler);
+    };
+  }, [onClose]);
+
+  const photoCount = details?.photos?.length ?? 0;
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <button className="modal-close" onClick={onClose}>✕</button>
+
+        {/* Photos */}
+        {details?.photos?.length ? (
+          <>
+            <div className="photo-carousel">
+              <img src={details.photos[photoIndex].photo_url} alt={`${details.name} photo ${photoIndex + 1}`} />
+              {photoCount > 1 && (
+                <>
+                  <button className="photo-nav photo-nav-left" onClick={() => setPhotoIndex((photoIndex - 1 + photoCount) % photoCount)}>‹</button>
+                  <button className="photo-nav photo-nav-right" onClick={() => setPhotoIndex((photoIndex + 1) % photoCount)}>›</button>
+                </>
+              )}
+            </div>
+            {photoCount > 1 && (
+              <div className="photo-dots">
+                {details.photos.map((_, i) => (
+                  <button key={i} className={`photo-dot${i === photoIndex ? " photo-dot-active" : ""}`} onClick={() => setPhotoIndex(i)} />
+                ))}
+              </div>
+            )}
+          </>
+        ) : !loading ? (
+          <div style={{ height: 100, background: "#f5f5f5", display: "flex", alignItems: "center", justifyContent: "center", borderBottom: "1px solid var(--border)" }}>
+            <span className="text-muted">No photos available</span>
+          </div>
+        ) : null}
+
+        <div style={{ padding: "16px 20px 20px" }}>
+          {loading ? (
+            <div className="text-center" style={{ padding: "32px 0" }}>
+              <span className="spinner" style={{ width: 24, height: 24, borderWidth: 2 }} />
+              <p className="text-muted mt-3">Loading details...</p>
+            </div>
+          ) : error ? (
+            <p style={{ color: "#991b1b", fontSize: 13 }}>{error}</p>
+          ) : details ? (
+            <>
+              {/* Header */}
+              <div className="flex items-center gap-2 mb-4" style={{ flexWrap: "wrap" }}>
+                <ScoreCircle score={enriched.health_score} />
+                <div>
+                  <p style={{ fontWeight: 700, fontSize: 16 }}>{details.name}</p>
+                  {details.rating != null && <StarRating rating={details.rating} />}
+                </div>
+              </div>
+
+              {/* Suggested order */}
+              <p style={{ fontSize: 13, color: "var(--primary-dk)", fontWeight: 600, marginBottom: 8 }}>
+                Suggested: {enriched.suggested_order}
+              </p>
+
+              {/* Macros */}
+              {macros ? (() => {
+                const dv = {
+                  calories: 2000, protein: 50, carbs: 275, fat: 78,
+                  fiber: 28, sugar: 50, satFat: 20, sodium: 2300, cholesterol: 300,
+                };
+                const pct = (val: number | undefined, ref: number) =>
+                  val != null ? Math.round((val / ref) * 100) : null;
+
+                return (
+                  <div className="card mb-4" style={{ padding: "14px", background: "#f9fafb" }}>
+                    {/* Primary macros */}
+                    <div className="grid-4" style={{ textAlign: "center", gap: 6 }}>
+                      {macros.calories != null && (
+                        <div className="macro-stat">
+                          <span className="macro-stat-val" style={{ fontSize: 18 }}>{Math.round(macros.calories)}</span>
+                          <span className="macro-stat-label">Cal</span>
+                          <span style={{ fontSize: 11, color: "var(--light)" }}>{pct(macros.calories, dv.calories)}% DV</span>
+                        </div>
+                      )}
+                      {macros.protein_g != null && (
+                        <div className="macro-stat">
+                          <span className="macro-stat-val" style={{ fontSize: 18 }}>{Math.round(macros.protein_g)}g</span>
+                          <span className="macro-stat-label">Protein</span>
+                          <span style={{ fontSize: 11, color: "var(--light)" }}>{pct(macros.protein_g, dv.protein)}% DV</span>
+                        </div>
+                      )}
+                      {macros.carbs_g != null && (
+                        <div className="macro-stat">
+                          <span className="macro-stat-val" style={{ fontSize: 18 }}>{Math.round(macros.carbs_g)}g</span>
+                          <span className="macro-stat-label">Carbs</span>
+                          <span style={{ fontSize: 11, color: "var(--light)" }}>{pct(macros.carbs_g, dv.carbs)}% DV</span>
+                        </div>
+                      )}
+                      {macros.fat_g != null && (
+                        <div className="macro-stat">
+                          <span className="macro-stat-val" style={{ fontSize: 18 }}>{Math.round(macros.fat_g)}g</span>
+                          <span className="macro-stat-label">Fat</span>
+                          <span style={{ fontSize: 11, color: "var(--light)" }}>{pct(macros.fat_g, dv.fat)}% DV</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Nutrient profile */}
+                    {(macros.fiber_g != null || macros.sugar_g != null || macros.saturated_fat_g != null || macros.sodium_mg != null || macros.cholesterol_mg != null) && (
+                      <>
+                        <div style={{ height: 1, background: "var(--border)", margin: "12px 0" }} />
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 20px", fontSize: 12 }}>
+                          {macros.fiber_g != null && (
+                            <div className="flex" style={{ justifyContent: "space-between" }}>
+                              <span style={{ color: "var(--muted)" }}>Fiber</span>
+                              <span><span style={{ fontWeight: 600 }}>{Math.round(macros.fiber_g)}g</span> <span style={{ color: "var(--light)" }}>{pct(macros.fiber_g, dv.fiber)}%</span></span>
+                            </div>
+                          )}
+                          {macros.sugar_g != null && (
+                            <div className="flex" style={{ justifyContent: "space-between" }}>
+                              <span style={{ color: "var(--muted)" }}>Sugar</span>
+                              <span><span style={{ fontWeight: 600 }}>{Math.round(macros.sugar_g)}g</span> <span style={{ color: "var(--light)" }}>{pct(macros.sugar_g, dv.sugar)}%</span></span>
+                            </div>
+                          )}
+                          {macros.saturated_fat_g != null && (
+                            <div className="flex" style={{ justifyContent: "space-between" }}>
+                              <span style={{ color: "var(--muted)" }}>Sat. Fat</span>
+                              <span><span style={{ fontWeight: 600 }}>{Math.round(macros.saturated_fat_g)}g</span> <span style={{ color: "var(--light)" }}>{pct(macros.saturated_fat_g, dv.satFat)}%</span></span>
+                            </div>
+                          )}
+                          {macros.sodium_mg != null && (
+                            <div className="flex" style={{ justifyContent: "space-between" }}>
+                              <span style={{ color: "var(--muted)" }}>Sodium</span>
+                              <span><span style={{ fontWeight: 600 }}>{Math.round(macros.sodium_mg)}mg</span> <span style={{ color: "var(--light)" }}>{pct(macros.sodium_mg, dv.sodium)}%</span></span>
+                            </div>
+                          )}
+                          {macros.cholesterol_mg != null && (
+                            <div className="flex" style={{ justifyContent: "space-between" }}>
+                              <span style={{ color: "var(--muted)" }}>Cholesterol</span>
+                              <span><span style={{ fontWeight: 600 }}>{Math.round(macros.cholesterol_mg)}mg</span> <span style={{ color: "var(--light)" }}>{pct(macros.cholesterol_mg, dv.cholesterol)}%</span></span>
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    )}
+
+                    <p className="text-muted mt-3" style={{ fontSize: 11, fontStyle: "italic" }}>
+                      Estimated from similar restaurant menu items
+                    </p>
+                  </div>
+                );
+              })() : (
+                <div className="card mb-4" style={{ padding: "14px", background: "#f9fafb", textAlign: "center" }}>
+                  <span className="spinner" style={{ width: 14, height: 14, borderWidth: 1.5 }} />
+                  <span className="text-muted" style={{ marginLeft: 8, fontSize: 12 }}>Loading nutrition data...</span>
+                </div>
+              )}
+
+              {/* Detail rows */}
+              <div style={{ marginBottom: 16 }}>
+                <div className="detail-row">
+                  <span className="detail-icon">@</span>
+                  <span className="detail-value">{details.formatted_address}</span>
+                </div>
+
+                {details.phone && (
+                  <div className="detail-row">
+                    <span className="detail-icon">T</span>
+                    <a href={`tel:${details.phone}`} className="detail-link">{details.phone}</a>
+                  </div>
+                )}
+
+                {details.website && (
+                  <div className="detail-row">
+                    <span className="detail-icon">W</span>
+                    <a href={details.website} target="_blank" rel="noopener noreferrer" className="detail-link">
+                      {(() => { try { return new URL(details.website).hostname; } catch { return details.website; } })()}
+                    </a>
+                  </div>
+                )}
+
+                {details.opening_hours_text.length > 0 && (
+                  <div className="detail-row" style={{ flexDirection: "column", gap: 4 }}>
+                    <p style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>Hours</p>
+                    {details.opening_hours_text.map((line, i) => (
+                      <p key={i} style={{ fontSize: 12, color: "var(--muted)" }}>{line}</p>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Action buttons */}
+              <div className="flex gap-2">
+                {details.website && (
+                  <a href={details.website} target="_blank" rel="noopener noreferrer" className="btn btn-primary" style={{ flex: 1, textDecoration: "none", textAlign: "center" }}>
+                    View Menu / Website
+                  </a>
+                )}
+                <a
+                  href={`https://www.google.com/maps/place/?q=place_id:${details.place_id}`}
+                  target="_blank" rel="noopener noreferrer"
+                  className="btn btn-secondary"
+                  style={{ flex: 1, textDecoration: "none", textAlign: "center" }}
+                >
+                  Directions
+                </a>
+              </div>
+            </>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function RestaurantsPage() {
   const [status, setStatus] = useState<"idle" | "locating" | "fetching" | "scoring" | "done" | "error">("idle");
   const [results, setResults] = useState<EnrichedResult[]>([]);
@@ -85,6 +373,10 @@ export default function RestaurantsPage() {
   const [keyword, setKeyword] = useState("");
   const [addressInput, setAddressInput] = useState("");
   const [radiusMiles, setRadiusMiles] = useState(1);
+  const [selectedRestaurant, setSelectedRestaurant] = useState<EnrichedResult | null>(null);
+  const [nextPageToken, setNextPageToken] = useState<string | null>(null);
+  const [searchCoords, setSearchCoords] = useState<{ lat: number; lon: number } | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
     try {
@@ -93,10 +385,39 @@ export default function RestaurantsPage() {
     } catch {}
   }, []);
 
+  async function scorePlaces(places: PlaceResult[]): Promise<EnrichedResult[]> {
+    const restaurants = places.map((p) => ({
+      name: p.name,
+      cuisine: p.types.filter((t) => !["food", "point_of_interest", "establishment", "restaurant"].includes(t)).join(", "),
+      amenity: "restaurant",
+    }));
+
+    const res = await fetch("/api/restaurants/score", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        restaurants,
+        dietary_restrictions: profile?.restrictions ?? [],
+        calorie_goal: profile?.goals?.calories ?? 2000,
+        context: "traveling correspondent eating on the go",
+      }),
+    });
+    if (!res.ok) throw new Error("Scoring failed");
+    const scored = await res.json();
+
+    const placeMap = new Map(places.map((p) => [p.name.toLowerCase(), p]));
+    return (scored.suggestions as ScoredRestaurant[]).map((s) => ({
+      ...s,
+      place: placeMap.get(s.name.toLowerCase()),
+    }));
+  }
+
   async function searchWithCoords(lat: number, lon: number) {
     setStatus("fetching");
     setResults([]);
     setAllPlaces([]);
+    setNextPageToken(null);
+    setSearchCoords({ lat, lon });
 
     let places: PlaceResult[] = [];
     try {
@@ -115,6 +436,7 @@ export default function RestaurantsPage() {
       const data = await res.json();
       places = (data.places as PlaceResult[]).slice(0, 20);
       setAllPlaces(places);
+      setNextPageToken(data.next_page_token ?? null);
 
       if (!locationName && places[0]?.address) {
         setLocationName(places[0].address.split(",").slice(-2).join(",").trim());
@@ -134,30 +456,8 @@ export default function RestaurantsPage() {
     setStatus("scoring");
 
     try {
-      const restaurants = places.map((p) => ({
-        name: p.name,
-        cuisine: p.types.filter((t) => !["food", "point_of_interest", "establishment", "restaurant"].includes(t)).join(", "),
-        amenity: "restaurant",
-      }));
-
-      const res = await fetch("/api/restaurants/score", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          restaurants,
-          dietary_restrictions: profile?.restrictions ?? [],
-          calorie_goal: profile?.goals?.calories ?? 2000,
-          context: "traveling correspondent eating on the go",
-        }),
-      });
-      if (!res.ok) throw new Error("Scoring failed");
-      const scored = await res.json();
-
-      const placeMap = new Map(places.map((p) => [p.name.toLowerCase(), p]));
-      setResults((scored.suggestions as ScoredRestaurant[]).map((s) => ({
-        ...s,
-        place: placeMap.get(s.name.toLowerCase()),
-      })));
+      const enriched = await scorePlaces(places);
+      setResults(enriched);
       setStatus("done");
     } catch {
       setStatus("error");
@@ -165,7 +465,38 @@ export default function RestaurantsPage() {
     }
   }
 
-  async function useGPS() {
+  async function loadMore() {
+    if (!nextPageToken || !searchCoords) return;
+    setLoadingMore(true);
+
+    try {
+      const params = new URLSearchParams({
+        latitude: searchCoords.lat.toString(),
+        longitude: searchCoords.lon.toString(),
+        radius: milesToMeters(radiusMiles).toString(),
+        page_token: nextPageToken,
+      });
+      if (keyword.trim()) params.set("keyword", keyword.trim());
+
+      const res = await fetch(`/api/places/nearby?${params}`);
+      if (!res.ok) throw new Error("Failed to fetch more restaurants");
+      const data = await res.json();
+      const newPlaces = data.places as PlaceResult[];
+      setAllPlaces((prev) => [...prev, ...newPlaces]);
+      setNextPageToken(data.next_page_token ?? null);
+
+      if (newPlaces.length > 0) {
+        const enriched = await scorePlaces(newPlaces);
+        setResults((prev) => [...prev, ...enriched]);
+      }
+    } catch {
+      // Silently fail — user can try again
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  async function locateWithGPS() {
     setStatus("locating");
     setErrorMsg("");
     setLocationName("");
@@ -180,7 +511,7 @@ export default function RestaurantsPage() {
     }
   }
 
-  async function useAddress() {
+  async function searchAddress() {
     if (!addressInput.trim()) return;
     setStatus("locating");
     setErrorMsg("");
@@ -217,7 +548,7 @@ export default function RestaurantsPage() {
         <button
           className="btn btn-primary btn-full"
           style={{ padding: "11px", fontSize: 14 }}
-          onClick={useGPS}
+          onClick={locateWithGPS}
           disabled={busy}
         >
           {busy && status === "locating" && !addressInput
@@ -239,12 +570,12 @@ export default function RestaurantsPage() {
             placeholder="City, zip code, or address"
             value={addressInput}
             onChange={(e) => setAddressInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && !busy && useAddress()}
+            onKeyDown={(e) => e.key === "Enter" && !busy && searchAddress()}
             disabled={busy}
           />
           <button
             className="btn btn-secondary"
-            onClick={useAddress}
+            onClick={searchAddress}
             disabled={busy || !addressInput.trim()}
             style={{ whiteSpace: "nowrap" }}
           >
@@ -266,25 +597,21 @@ export default function RestaurantsPage() {
           />
         </div>
 
-        {/* Radius slider */}
+        {/* Radius dropdown */}
         <div className="form-group">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <label className="label-text">Search radius</label>
-            <span style={{ fontSize: 13, fontWeight: 600 }}>{fmtMiles(radiusMiles)}</span>
-          </div>
-          <input
-            type="range"
-            min={0.25}
-            max={10}
-            step={0.25}
+          <label className="label-text">Search radius</label>
+          <select
+            className="select"
             value={radiusMiles}
             onChange={(e) => setRadiusMiles(Number(e.target.value))}
-            style={{ width: "100%", accentColor: "var(--text)", cursor: "pointer", marginTop: 6 }}
-          />
-          <div className="flex" style={{ justifyContent: "space-between" }}>
-            <span className="text-muted" style={{ fontSize: 11 }}>¼ mile</span>
-            <span className="text-muted" style={{ fontSize: 11 }}>10 miles</span>
-          </div>
+            disabled={busy}
+          >
+            <option value={0.5}>0.5 miles</option>
+            <option value={1}>1 mile</option>
+            <option value={2}>2 miles</option>
+            <option value={5}>5 miles</option>
+            <option value={10}>10 miles</option>
+          </select>
         </div>
       </div>
 
@@ -325,7 +652,7 @@ export default function RestaurantsPage() {
             {results.map((r, i) => {
               const p = r.place;
               return (
-                <div key={i} className="card restaurant-item card-hover">
+                <div key={i} className="card restaurant-item card-hover" onClick={() => setSelectedRestaurant(r)}>
                   <ScoreCircle score={r.health_score} />
                   <div className="restaurant-info">
                     <div className="flex items-center gap-2" style={{ flexWrap: "wrap" }}>
@@ -358,7 +685,28 @@ export default function RestaurantsPage() {
               );
             })}
           </div>
+
+          {nextPageToken && (
+            <div className="text-center mt-4">
+              <button
+                className="btn btn-secondary"
+                style={{ padding: "10px 32px", fontSize: 14 }}
+                onClick={loadMore}
+                disabled={loadingMore}
+              >
+                {loadingMore
+                  ? <><span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Loading more…</>
+                  : "Show More Restaurants"}
+              </button>
+            </div>
+          )}
         </>
+      )}
+      {selectedRestaurant && (
+        <RestaurantDetailModal
+          enriched={selectedRestaurant}
+          onClose={() => setSelectedRestaurant(null)}
+        />
       )}
     </main>
   );
