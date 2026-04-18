@@ -180,7 +180,7 @@ export default function RestaurantsPage() {
     }
   }
 
-  async function useAddress() {
+  async function submitAddress() {
     if (!addressInput.trim()) return;
     setStatus("locating");
     setErrorMsg("");
@@ -239,12 +239,12 @@ export default function RestaurantsPage() {
             placeholder="City, zip code, or address"
             value={addressInput}
             onChange={(e) => setAddressInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && !busy && useAddress()}
+            onKeyDown={(e) => e.key === "Enter" && !busy && submitAddress()}
             disabled={busy}
           />
           <button
             className="btn btn-secondary"
-            onClick={useAddress}
+            onClick={submitAddress}
             disabled={busy || !addressInput.trim()}
             style={{ whiteSpace: "nowrap" }}
           >
