@@ -62,3 +62,14 @@ The coach router passes a `context` field (e.g. "at the airport") alongside the 
 | Variable | Where | Purpose |
 |---|---|---|
 | `ANTHROPIC_API_KEY` | `backend/.env` | Claude API access |
+
+
+### Project Ideas
+Create web app where we use an API to access all nearby restaurants/food places from user
+Find a way to access restaurant menu and use AI to summarize/give health score for the users desired macros
+Implement a personal coach using AI that offers real time nutritional advice
+Based on restaurants' opening hours, your appointment locations, and your calendar, plot where you should go, what you should eat at what time 
+Add feature to roughly “track” macros using a photo (+ user description) of the food that they eat - nutrients + macros
+Provide and track basic macros for the user based off of height/weight/age/gender
+Adjust profile based off of dietary restrictions
+
