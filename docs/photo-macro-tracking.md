@@ -100,6 +100,8 @@ With the server running, visit [http://localhost:8000/docs](http://localhost:800
 
 ## Running the Backend
 
+**Requirements:** Python 3.9+.
+
 **First time — one command:**
 ```bash
 ./backend/setup.sh
