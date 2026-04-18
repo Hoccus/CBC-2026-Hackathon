@@ -102,7 +102,7 @@ export default function RestaurantsPage() {
           restaurants,
           dietary_restrictions: profile?.restrictions ?? [],
           calorie_goal: profile?.goals.calories ?? 2000,
-          context: "traveling correspondent eating on the go",
+          context: "real-life eating with limited time and imperfect information",
         }),
       });
       if (!res.ok) throw new Error("Scoring failed");
